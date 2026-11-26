@@ -1,0 +1,46 @@
+name: globalGOV portable source collector
+# Scheduled publishing is disabled during repository migration.
+# PRs always execute a read-only dry-run. This workflow never uses India data.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Submit signed official-source results to isolated GovRadar staging"
+        required: true
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - 'apps/govexam-radar/**'
+      - '.github/workflows/govradar-portable-collector.yml'
+permissions:
+  contents: read
+concurrency:
+  group: govradar-source-collector
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline parser, security and HTTP bridge tests
+        run: node --test apps/govexam-radar/collector-bridge.test.mjs apps/govexam-radar/collector-client.test.mjs
+      - name: Read official sources without publishing (always safe)
+        env:
+          GOVRADAR_COLLECTOR_TARGET: https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev
+        run: node apps/govexam-radar/collector-client.mjs --dry-run
+      - name: Signed publish — only scheduled or founder manual approval
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+        env:
+          GOVRADAR_COLLECTOR_KEY: ${{ secrets.GOVRADAR_COLLECTOR_KEY }}
+          GOVRADAR_COLLECTOR_TARGET: https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev
+        run: |
+          if [ -z "${GOVRADAR_COLLECTOR_KEY}" ]; then
+            echo "Collector disabled: protected GOVRADAR_COLLECTOR_KEY is not installed."
+            exit 1
+          fi
+          node apps/govexam-radar/collector-client.mjs
