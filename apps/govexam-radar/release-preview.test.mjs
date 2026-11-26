@@ -65,7 +65,8 @@ test("research metadata keeps source-specific rights and ISRO attribution separa
  const r=await serveOfficialNotices(storage,new URLSearchParams(),"research"),data=await r.json();
  assert.equal(r.status,200);
  assert.equal(data.releaseProfile,"research");
- assert.equal(data.sources.length,4);
+ assert.equal(data.sources.length,5);
+ assert.equal(data.sources.find(x=>x.id==='india-ssb-recruitment').commercialReuseApprovedForCurrentFields,true);
  assert.equal(data.sources.find(x=>x.id==="manitoba-jobs").commercialReuseApprovedForCurrentFields,false);
  assert.equal(data.sources.find(x=>x.id==="india-isro-opportunities").commercialReuseApprovedForCurrentFields,true);
  assert.equal(data.notices.length,2);
