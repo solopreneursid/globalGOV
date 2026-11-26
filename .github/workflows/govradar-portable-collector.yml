@@ -1,5 +1,5 @@
-name: GovRadar portable source collector
-# Cron runs only on the repository's default branch after a reviewed release.
+name: globalGOV portable source collector
+# Scheduled publishing is disabled during repository migration.
 # PRs always execute a read-only dry-run. This workflow never uses India data.
 on:
   workflow_dispatch:
@@ -9,8 +9,6 @@ on:
         required: true
         default: false
         type: boolean
-  schedule:
-    - cron: '55 */3 * * *'
   pull_request:
     paths:
       - 'apps/govexam-radar/**'
@@ -36,7 +34,7 @@ jobs:
           GOVRADAR_COLLECTOR_TARGET: https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev
         run: node apps/govexam-radar/collector-client.mjs --dry-run
       - name: Signed publish — only scheduled or founder manual approval
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true
         env:
           GOVRADAR_COLLECTOR_KEY: ${{ secrets.GOVRADAR_COLLECTOR_KEY }}
           GOVRADAR_COLLECTOR_TARGET: https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev

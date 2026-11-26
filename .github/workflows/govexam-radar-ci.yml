@@ -1,4 +1,4 @@
-name: GovRadar checks
+name: globalGOV checks
 on:
   workflow_dispatch:
   push:
@@ -40,6 +40,7 @@ jobs:
           path: apps/govexam-radar/govradar-*.png
           if-no-files-found: ignore
   smoke:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

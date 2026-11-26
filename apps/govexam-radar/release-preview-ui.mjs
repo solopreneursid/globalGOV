@@ -6,8 +6,8 @@ export const RELEASE_PREVIEW_HTML=`<!doctype html>
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#071525">
-<meta name="description" content="GlobalGovJobs research preview: explore UK Department for Education teaching vacancies sourced from the official feed.">
-<title>GlobalGovJobs · UK Education Release Preview</title>
+<meta name="description" content="globalGOV research preview: explore UK Department for Education teaching vacancies sourced from the official feed.">
+<title>globalGOV · UK Education Release Preview</title>
 <link rel="stylesheet" href="/release-preview.css">
 <script src="/release-preview.js" defer></script>
 </head>
@@ -15,7 +15,7 @@ export const RELEASE_PREVIEW_HTML=`<!doctype html>
 <a class="skip-link" href="#vacancies">Skip to vacancies</a>
 <div class="site-shell">
 <header class="topbar">
- <a class="brand" href="/release-preview" aria-label="GlobalGovJobs UK release preview"><span class="brand-mark" aria-hidden="true">G</span><span>Gov<span class="accent">Radar</span><small>by HQventures</small></span></a>
+ <a class="brand" href="/release-preview" aria-label="globalGOV UK release preview"><span class="brand-mark" aria-hidden="true">G</span><span>Gov<span class="accent">Radar</span><small>by HQventures</small></span></a>
  <nav aria-label="Main navigation"><a href="#vacancies">Explore jobs</a><a href="#about">Our source</a><a class="back-link" href="/">Research HQ <span aria-hidden="true">↗</span></a></nav>
 </header>
 <main>
@@ -42,7 +42,7 @@ export const RELEASE_PREVIEW_HTML=`<!doctype html>
    <label class="field field-type">Category<select id="preview-stream"><option value="">All categories</option><option value="Technical">Technical (inferred)</option><option value="Non-technical">Non-technical (inferred)</option><option value="Unclassified">Unclassified</option></select></label>
    <button class="filter-submit" type="submit">Search jobs <span aria-hidden="true">→</span></button>
   </form>
-  <div class="saved-search"><div><strong>Save your UK job search</strong><p>Keep your filters on this device. Reopen GlobalGovJobs to check matching vacancies; no off-device notification service.</p><p id="saved-search-status" role="status" aria-live="polite">No search saved.</p></div><div class="saved-search-actions"><button id="save-search" type="button">Save search</button><button id="use-saved-search" type="button">Use saved search</button><button id="clear-saved-search" type="button">Remove</button></div></div>
+  <div class="saved-search"><div><strong>Save your UK job search</strong><p>Keep your filters on this device. Reopen globalGOV to check matching vacancies; no off-device notification service.</p><p id="saved-search-status" role="status" aria-live="polite">No search saved.</p></div><div class="saved-search-actions"><button id="save-search" type="button">Save search</button><button id="use-saved-search" type="button">Use saved search</button><button id="clear-saved-search" type="button">Remove</button></div></div>
   <div class="listing-toolbar"><p id="preview-status" role="status" aria-live="polite">Loading source-observed listings…</p><button id="preview-reset" class="reset-button" type="button">Clear filters</button></div>
   <div class="watch-panel"><div><strong>Watch this search while this page is open</strong><p>Optional check every 15 minutes while the tab is visible. No remote delivery or checks after closing the page.</p><p id="watch-status" role="status" aria-live="polite">Watching is off.</p></div><button id="watch-toggle" type="button" aria-pressed="false">Start watching</button></div>
   <section class="local-alerts" aria-labelledby="local-alerts-title"><div class="local-alerts-head"><div><h3 id="local-alerts-title">Recent changes on this device</h3><p>Detected only when you view or watch listings here. Not a complete source history.</p></div><button id="clear-local-alerts" type="button">Clear history</button></div><p id="local-alerts-status" role="status" aria-live="polite">No changes recorded.</p><div id="local-alerts-list" class="local-alerts-list"></div></section>
@@ -51,7 +51,7 @@ export const RELEASE_PREVIEW_HTML=`<!doctype html>
   <div id="preview-pages" class="pages" aria-label="Results pagination"></div>
  </section>
  <section class="trust-section" id="about" aria-labelledby="about-heading">
-  <div><p class="section-kicker">BUILT FOR CLARITY</p><h2 id="about-heading">Your next step stays in your hands.</h2><p>GlobalGovJobs helps you discover relevant official-source opportunities. It does not verify each job, handle applications, charge job-seekers to contact employers, or represent any government authority.</p></div>
+  <div><p class="section-kicker">BUILT FOR CLARITY</p><h2 id="about-heading">Your next step stays in your hands.</h2><p>globalGOV helps you discover relevant official-source opportunities. It does not verify each job, handle applications, charge job-seekers to contact employers, or represent any government authority.</p></div>
   <div class="trust-cards">
    <article><span class="trust-icon" aria-hidden="true">01</span><h3>Official-source links</h3><p>Every listing points back to the Department for Education's Teaching Vacancies site.</p></article>
    <article><span class="trust-icon" aria-hidden="true">02</span><h3>Information, not endorsement</h3><p>Check closing dates, job details and eligibility on the official listing before applying.</p></article>
@@ -59,7 +59,7 @@ export const RELEASE_PREVIEW_HTML=`<!doctype html>
   </div>
  </section>
 </main>
-<footer class="footer"><div class="footer-brand">GlobalGovJobs <span>· HQventures</span></div><p>Contains public sector information licensed under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener noreferrer">Open Government Licence v3.0</a> (© Crown copyright). Not affiliated with or endorsed by the UK government. No fees for contacting, interviewing or hiring through reused DfE listings.</p><p class="footer-last">This page is a controlled release preview, not a public product launch. Manitoba and India content is excluded.</p></footer>
+<footer class="footer"><div class="footer-brand">globalGOV <span>· HQventures</span></div><p>Contains public sector information licensed under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener noreferrer">Open Government Licence v3.0</a> (© Crown copyright). Not affiliated with or endorsed by the UK government. No fees for contacting, interviewing or hiring through reused DfE listings.</p><p class="footer-last">This page is a controlled release preview, not a public product launch. Manitoba and India content is excluded.</p></footer>
 </div>
 </body></html>`;
 export const RELEASE_PREVIEW_CSS=`

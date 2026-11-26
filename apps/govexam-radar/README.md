@@ -1,6 +1,6 @@
-# GovRadar · HQventures Product 01
+# globalGOV · HQventures Product 01
 
-GovRadar is a transparent, zero-dependency government recruitment **source directory and research-lead tracker**. Its first version transforms the uploaded GovExam & Job Radar HTML prototype into a deployable Cloudflare Worker.
+globalGOV is a transparent, zero-dependency government recruitment **source directory and research-lead tracker**. Its first version transforms the uploaded GovExam & Job Radar HTML prototype into a deployable Cloudflare Worker.
 
 ## Honest scope (v2.2 pilot)
 
@@ -15,7 +15,7 @@ GovRadar is a transparent, zero-dependency government recruitment **source direc
 - Community now includes report buttons, personal export, post deletion and account deletion. Reports enter an unreviewed D1 queue; **public community launch still needs human moderation operations, privacy review and abuse-volume monitoring**.
 - Self-hosted compiled Tailwind CSS 3.4.17, with source generator and portable CSS. Zero third-party browser runtime fetches.
 - OpenAPI 3.1 contract at `/openapi.json` plus JSON catalog and health endpoints, strict Content Security Policy, no third-party client scripts, and no backend collection of candidate information.
-- **Official-feed pilot:** one source-specific, daily-to-three-hour rotating adapter for the UK DfE's Teaching Vacancies open-data API. The source returns Schema.org `JobPosting` records; GovRadar only imports records with future `validThrough`, verified official-domain URLs, and required fields. These are **source-confirmed records, not individually verified job notices**.
+- **Official-feed pilot:** one source-specific, daily-to-three-hour rotating adapter for the UK DfE's Teaching Vacancies open-data API. The source returns Schema.org `JobPosting` records; globalGOV only imports records with future `validThrough`, verified official-domain URLs, and required fields. These are **source-confirmed records, not individually verified job notices**.
 - **Not implemented**: comprehensive global live vacancy coverage, verified admit-card/result ingestion, background delivery, recoverable cross-device accounts. Do not advertise these as live.
 
 ## API
@@ -60,7 +60,7 @@ The Worker Free plan has request and CPU caps; zero cost applies **within free-t
 
 ### Deployment DB binding
 
-`DB` → `b1f499a6-283b-47e8-8cd7-ef2b5f7245bc` in account `69234e51e08d8013980a7ff869746609`. D1 schema: `members`, `posts`, `replies`, `votes` plus indexes. Source domain, account and DB identifiers are not secrets; API credentials must never enter source code. The staging Worker is `hqventures-govexam-parity-preview` and the established independent GovRadar Worker is `hqventures-govexam-radar`.
+`DB` → `b1f499a6-283b-47e8-8cd7-ef2b5f7245bc` in account `69234e51e08d8013980a7ff869746609`. D1 schema: `members`, `posts`, `replies`, `votes` plus indexes. Source domain, account and DB identifiers are not secrets; API credentials must never enter source code. The staging Worker is `hqventures-govexam-parity-preview` and the established independent globalGOV Worker is `hqventures-govexam-radar`.
 
 ## Scheduled monitoring (verified source availability only)
 
@@ -120,7 +120,7 @@ This remains an isolated Cloudflare staging Worker plus a **draft GitHub pull re
 - The staging Worker has three explicitly configured schedules: source-site reachability (`0 */3 * * *`), the DfE jobs JSON page reader (`20 */3 * * *`), and the Manitoba civil-service RSS reader (`40 */3 * * *`). A scheduler being configured is **not** proof of successful unattended import.
 - The first scheduled UK and Manitoba attempts both recorded `network_error` from the Worker. The bounded, same-official-host redirect/retry fixes are now deployed to the **isolated preview**, but recurrence after the fixes must still be demonstrated by successful source-specific D1 audits.
 - `GET /api/ingestion-status` now returns `automation.observedForAllSources` and `automation.healthy`, excluding `bootstrap-*` one-time imports. The frontend does not call a bootstrap or failed fetch a healthy live sync.
-- A new adapter can read only minimal date-labeled entries from India's official Employment News index. Its read-only government site probe returned HTTP 200 and parsed two future-closing summaries from the current snapshot. Because prior written permission for commercial republication has **not** been established, the **India importer is deliberately not scheduled or bootstrapped**. Never claim its listings are available in GovRadar before that changes.
+- A new adapter can read only minimal date-labeled entries from India's official Employment News index. Its read-only government site probe returned HTTP 200 and parsed two future-closing summaries from the current snapshot. Because prior written permission for commercial republication has **not** been established, the **India importer is deliberately not scheduled or bootstrapped**. Never claim its listings are available in globalGOV before that changes.
 - Consult `PHASE1_RELEASE_GATE.md` for the evidence, policy review and remaining release conditions. Prefer officially reusable open datasets under India's Government Open Data License or direct authorized recruitment feeds rather than assuming all official websites grant commercial republication rights.
 - Keep deployment portable: the modules use standard Fetch APIs and SQLite-compatible D1 SQL; any fallback collector must remain first-party and independently verified. No production YorpHives website deployment was made.
 

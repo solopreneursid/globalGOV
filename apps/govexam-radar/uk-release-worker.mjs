@@ -20,11 +20,11 @@ function response(text,status,contentType,cache="no-store",extra={}){
 }
 function error(status,code){return response(JSON.stringify({error:code}),status,"application/json; charset=utf-8");}
 const HTML=RELEASE_PREVIEW_HTML
- .replace('href="/" aria-label="GovRadar UK release preview"','href="/" aria-label="GovRadar UK release preview"')
+ .replace('href="/" aria-label="globalGOV UK release preview"','href="/" aria-label="globalGOV UK release preview"')
  .replace('href="/">Research HQ','href="#about">About');
 const OPENAPI=Object.freeze({
  openapi:"3.1.0",
- info:{title:"GovRadar UK Official Vacancies — Release Candidate",version:"0.1.0",description:"UK DfE only. Source-observed vacancies, not individually verified. Not publicly launched."},
+ info:{title:"globalGOV UK Official Vacancies — Release Candidate",version:"0.1.0",description:"UK DfE only. Source-observed vacancies, not individually verified. Not publicly launched."},
  paths:{
   "/api/notices":{get:{summary:"Source-observed UK DfE listings only",responses:{
    "200":{description:"UK-only source evidence, no independent vacancy verification"},

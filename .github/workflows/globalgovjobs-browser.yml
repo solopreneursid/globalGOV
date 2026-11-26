@@ -1,8 +1,8 @@
-name: GlobalGovJobs supported-browser checks
+name: globalGOV supported-browser checks
 on:
   push:
     branches:
-      - feat/govradar-phase1-sources-20261116
+      - main
     paths:
       - 'apps/govexam-radar/**'
       - '.github/workflows/globalgovjobs-browser.yml'

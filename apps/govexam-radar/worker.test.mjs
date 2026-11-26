@@ -97,7 +97,7 @@ test("UK release candidate is self-hosted, noindexed and remains staging-only",a
  assert.equal(html.status,200);
  const body=await html.text();
  assert.match(body,/RELEASE CANDIDATE · STAGING ONLY/);
- assert.match(body,/GlobalGovJobs · UK Education Release Preview/);
+ assert.match(body,/globalGOV · UK Education Release Preview/);
  assert.match(body,/id="preview-grid"/);
  assert.match(body,/UK DfE · OGL v3\.0/);
  assert.match(html.headers.get("X-Robots-Tag"),/noindex/);
