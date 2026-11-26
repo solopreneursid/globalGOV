@@ -1,0 +1,217 @@
+name: GovRadar checks
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/govexam-radar/**'
+      - '.github/workflows/govexam-radar-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/govexam-radar/**'
+      - '.github/workflows/govexam-radar-ci.yml'
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/govexam-radar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unit and API tests
+        run: node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser tests at phone, tablet, and desktop widths
+        run: node --test browser.test.mjs uk-release-browser.test.mjs
+      - name: Save test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: govradar-responsive-previews
+          path: apps/govexam-radar/govradar-*.png
+          if-no-files-found: ignore
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check independent Cloudflare deployment
+        run: |
+          curl --fail --show-error --silent --max-time 25 --retry 2 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/api/health | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.status!=="ok"||d.service!=="hqventures-govradar")process.exit(1);console.log("Cloudflare health verified",d.version);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/health | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.status!=="ok"||d.version!=="2.7.0-preview")process.exit(1);console.log("Full-parity preview health verified",d.version);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/source-status | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.total!==60||!Array.isArray(d.sources)||d.verifiedVacancies!==0)process.exit(1);console.log("Scheduled status catalog verified",d.total);})'
+          curl --fail --show-error --silent --max-time 25 --retry 1 "https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/check?id=upsc" | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.sourceId!=="upsc"||!["reachable","restricted","unconfirmed"].includes(d.status))process.exit(1);console.log("Real on-demand source check:",d.status);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/source-status | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.total!==60||d.checkedSources<1)process.exit(1);console.log("Persisted source check evidence:",d.checkedSources);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/api/catalog | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.sources.length!==17||d.verifiedListings.length!==0)process.exit(1);console.log("Cloudflare catalog verified",d.sources.length);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/full.css | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{if(s.length<20000||!s.includes(".bg-indigo-600"))process.exit(1);console.log("Self-hosted production CSS verified",s.length);})'
+          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/ | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{if(!s.includes("Research Preview")||!s.includes("/enhance.js"))process.exit(1);console.log("Six-tab full release HTML verified");})'
+
+      - name: Verify simplified staging preview
+        run: |
+          node --input-type=module <<'NODE'
+          const base='https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev';
+          const [page,script,api,lite,liteScript]=await Promise.all([
+            fetch(base+'/?v=plain-ui-20261125'),
+            fetch(base+'/official.js?v=plain-ui-20261125'),
+            fetch(base+'/api/notices?limit=1'),
+            fetch(base+'/lite?v=plain-ui-20261125'),
+            fetch(base+'/lite.js?v=2.7.2')
+          ]);
+          if(!page.ok||!script.ok||!api.ok||!lite.ok||!liteScript.ok)throw Error('preview_http_failure');
+          const html=await page.text(),js=await script.text(),notices=await api.json(),liteHtml=await lite.text(),liteJs=await liteScript.text();
+          for(const text of ['Find government jobs easily.','Job websites','gg-region-help','gg-language'])
+            if(!html.includes(text))throw Error('preview_page_missing_'+text);
+          for(const text of ['Government job notices','Check the official notice before you apply','No notices found'])
+            if(!js.includes(text))throw Error('preview_script_missing_'+text);
+          if(!Array.isArray(notices.notices))throw Error('preview_notices_unavailable');
+          if(!liteHtml.includes('/lite.js?v=2.7.2'))throw Error('low_data_script_version_missing');
+          new Function(liteJs);
+          console.log('Simplified preview, low-data script syntax and official-notice API verified');
+          NODE
+
+      - name: Verify public preview source and community boundaries
+        run: |
+          node --input-type=module <<'NODE'
+          const origin='https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev';
+          const paths=['/api/notices?limit=50','/api/notices?country=India','/api/notices?country=Australia','/api/notices?source=manitoba-jobs','/api/notice-changes?limit=30','/api/ingestion-status','/privacy','/terms'];
+          const responses=await Promise.all(paths.map(path=>fetch(origin+path,{cache:'no-store'})));
+          if(responses.some((r,i)=>r.status!==(i===3?403:200)))throw Error('unexpected status');
+          const [all,india,australia,deny,changes,status]=await Promise.all(responses.slice(0,6).map(x=>x.json()));
+          const permitted=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities']);
+          for(const x of [all,india,australia]){
+            if(x.releaseProfile!=='approved_staging'||x.publicLaunchAuthorized!==false||!Array.isArray(x.sources)||!x.sources.some(s=>s.id==='uk-dfe-teaching-vacancies')||x.sources.some(s=>!permitted.has(s.id)||s.commercialReuseApprovedForCurrentFields!==true)||x.notices.some(n=>!permitted.has(n.sourceId))||typeof x.indiaSourceCheck?.ready!=='boolean')throw Error('unapproved source returned');
+            if(!x.indiaSourceCheck.ready&&(x.sources.some(s=>s.id==='india-isro-opportunities')||x.notices.some(n=>n.sourceId==='india-isro-opportunities')))throw Error('unchecked ISRO data exposed');
+          }
+          if(india.filters.country!=='India'||india.notices.some(n=>n.sourceId!=='india-isro-opportunities')||australia.total!==0||deny.error!=='source_not_approved_for_release_preview')throw Error('location or source filter failed');
+          if(changes.changes.some(x=>!permitted.has(x.sourceId))||status.bySource.some(x=>!permitted.has(x.sourceId)))throw Error('secondary feed leaked a source');
+          const privacy=await responses[6].text(),terms=await responses[7].text();
+          if(!privacy.includes('connect@yorphives.com')||!terms.includes('Open Government Licence'))throw Error('policies missing');
+          const paused=await fetch(origin+'/api/community/register',{method:'POST'});
+          if(paused.status!==503||(await paused.json()).error!=='community_paused')throw Error('community not paused');
+          console.log('Source rights, India checks, Australia filter, privacy and paused community verified');
+          NODE
+
+      - name: Verify deployed UK-only release candidate and server-side source isolation
+        run: |
+          node --input-type=module <<'NODE'
+          const origin='https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev';
+          const [page,css,js,allow,deny,canada,bypass]=await Promise.all([
+           fetch(origin+'/release-preview'),
+           fetch(origin+'/release-preview.css'),
+           fetch(origin+'/release-preview.js'),
+           fetch(origin+'/api/release-preview/notices?limit=30'),
+           fetch(origin+'/api/release-preview/notices?source=manitoba-jobs'),
+           fetch(origin+'/api/release-preview/notices?country=Canada'),
+           fetch(origin+'/api/release-preview/notices?scope=research')
+          ]);
+          if([page,css,js,allow,canada,bypass].some(r=>r.status!==200)||deny.status!==403)
+           throw Error('release_preview_http_contract_failed');
+          const html=await page.text(),style=await css.text(),script=await js.text();
+          if(!html.includes('RELEASE CANDIDATE')||!html.includes('OFFICIAL-SOURCE SNAPSHOT')||!html.includes('id="preview-grid"')||
+             !page.headers.get('x-robots-tag')?.includes('noindex')||
+             !style.includes('@media(max-width:700px)')||
+             !script.includes('/api/release-preview/notices'))throw Error('staged_uk_preview_assets_missing');
+          const approved=await allow.json(),excluded=await deny.json(),empty=await canada.json(),params=await bypass.json();
+          for(const dataset of [approved,empty,params]){
+           if(dataset.releaseProfile!=='uk_only_release_preview'||dataset.publicLaunchAuthorized!==false||
+              dataset.sources?.length!==1||dataset.sources[0]?.id!=='uk-dfe-teaching-vacancies'||
+              dataset.sources[0]?.commercialReuseApprovedForCurrentFields!==true||
+              !Array.isArray(dataset.notices)||dataset.notices.some(x=>x.sourceId!=='uk-dfe-teaching-vacancies'))
+             throw Error('release_preview_source_scope_failure');
+          }
+          if(!Number.isSafeInteger(approved.total)||approved.total<0||empty.notices.length!==0||
+              excluded.error!=='source_not_approved_for_release_preview')
+           throw Error('release_preview_filtered_query_failure');
+          console.log('UK-only staged preview HTTP, rights scope, responsive assets and query isolation verified',approved.total);
+          NODE
+
+      - name: Verify current UK source ingestion
+        run: |
+          node --input-type=module <<'NODE'
+          const response=await fetch('https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/ingestion-status');
+          const d=await response.json(),a=d.automation||{},s=a.sources||[];
+          const uk=s.find(x=>x.sourceId==='uk-dfe-teaching-vacancies');
+          if(!response.ok||!uk?.scheduledSuccessObserved||typeof a.healthy!=='boolean'||typeof d.indiaSourceCheck?.ready!=='boolean')throw Error('Source status unavailable');
+          console.log('UK source status and scheduled provenance available',a.healthy);
+          NODE
+
+      - name: Verify portable collector disabled by default and read-only source plan
+        run: |
+          node -e 'const origin="https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev";Promise.all([fetch(origin+"/api/collector/plan"),fetch(origin+"/api/collector/ingest",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})]).then(async([a,b])=>{if(a.status!==200||![401,415,503].includes(b.status))process.exit(1);const x=await a.json();if(!Array.isArray(x.sources)||x.sources.length!==2)process.exit(1);console.log("Read-only plan working, unauthenticated mutation denied",b.status);}).catch(()=>process.exit(1));'
+
+      - name: Read-only official Manitoba province RSS compatibility probe
+        run: node apps/govexam-radar/probe-manitoba.mjs
+
+      - name: Read-only India Employment News source/robots compatibility probe
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-india.mjs
+
+      - name: Read-only SSB access and robots probe
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-ssb.mjs
+
+      - name: Read-only ISRO access and robots probe
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-isro.mjs
+
+      - name: Verify independent UK-only Worker and data-isolated staging deployment
+        run: |
+          node --input-type=module <<'NODE'
+          const origin='https://hqventures-govradar-uk-isolated-preview.solopreneursid-proy.workers.dev';
+          const paths=['/','/api/notices?limit=50','/api/notices?country=Canada',
+            '/api/notices?source=manitoba-jobs','/api/collector/plan',
+            '/api/community/posts','/api/moderation/reports','/openapi.json','/robots.txt',
+            '/release-preview.css','/release-preview.js'];
+          const responses=await Promise.all(paths.map(async path=>[path,await fetch(origin+path)]));
+          const dict=Object.fromEntries(responses);
+          const ok=(path,status)=>{if(dict[path]?.status!==status)throw Error(path+' returned '+dict[path]?.status+', expected '+status);};
+          for(const path of ['/','/api/notices?limit=50','/api/notices?country=Canada','/openapi.json','/robots.txt','/release-preview.css','/release-preview.js'])ok(path,200);
+          ok('/api/notices?source=manitoba-jobs',403);
+          for(const path of ['/api/collector/plan','/api/community/posts','/api/moderation/reports'])ok(path,404);
+          const landing=await dict['/'].text();
+          if(!landing.includes('RELEASE CANDIDATE · STAGING ONLY')||!landing.includes('OFFICIAL-SOURCE SNAPSHOT')||
+             !landing.includes('id="preview-grid"')||
+             !dict['/'].headers.get('x-robots-tag')?.includes('noindex'))
+            throw Error('Noindex staging landing contract invalid');
+          const data=await dict['/api/notices?limit=50'].json();
+          if(data.releaseProfile!=='uk_only_release_preview'||data.publicLaunchAuthorized!==false||
+             !Array.isArray(data.sources)||data.sources.length!==1||
+             data.sources[0]?.id!=='uk-dfe-teaching-vacancies'||
+             !Number.isSafeInteger(data.total)||data.total<1||
+             !Array.isArray(data.notices)||data.notices.some(x=>x.sourceId!=='uk-dfe-teaching-vacancies'))
+            throw Error('Isolated UK data protection failure');
+          const canada=await dict['/api/notices?country=Canada'].json();
+          if(canada.notices.length!==0||canada.total!==0)throw Error('Unexpected non-UK rows');
+          const api=await dict['/openapi.json'].json();
+          if(JSON.stringify(Object.keys(api.paths).sort())!==JSON.stringify(['/api/freshness','/api/health','/api/notices']))
+            throw Error('Extra routes exposed in OpenAPI');
+          const denied=await fetch(origin+'/api/collector/ingest',{method:'POST',body:'{}'});
+          if(denied.status!==405)throw Error('Write method unexpectedly accepted');
+          const freshnessResponse=await fetch(origin+'/api/freshness',{cache:'no-store'});
+          if(freshnessResponse.status!==200||freshnessResponse.headers.get('cache-control')!=='no-store')
+            throw Error('UK mirror freshness endpoint unavailable');
+          const freshness=await freshnessResponse.json();
+          if(!['pending','current','delayed','unavailable'].includes(freshness.status)||
+             typeof freshness.fresh!=='boolean'||freshness.publicLaunchAuthorized!==false||
+             JSON.stringify(freshness).includes('database_id')||JSON.stringify(freshness).includes('error_code'))
+            throw Error('UK mirror freshness disclosure unsafe');
+          const script=await dict['/release-preview.js'].text();
+          if(!script.includes('/api/freshness')||!landing.includes('id="preview-freshness"'))
+            throw Error('UK mirror freshness not visible in preview');
+          console.log('UK-only isolated Worker verified: UK notices',data.total,'freshness',freshness.status,'zero write/research routes');
+          NODE
+

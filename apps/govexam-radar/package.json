@@ -1,0 +1,16 @@
+{
+  "name": "@hqventures/govradar",
+  "version": "2.5.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs",
+    "deploy": "node deploy.mjs",
+    "collector:dry-run": "node collector-client.mjs --dry-run",
+    "schedule:staging": "node schedule.mjs",
+    "uk-mirror:dry-run": "node uk-preview-sync.mjs --dry-run",
+    "uk-mirror:apply": "node uk-preview-sync.mjs --apply",
+    "uk-deploy:dry-run": "node uk-release-deploy.mjs --dry-run",
+    "uk-deploy:apply": "node uk-release-deploy.mjs --deploy"
+  }
+}
