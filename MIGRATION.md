@@ -12,3 +12,10 @@ The subsequent migration changes public branding, npm package name and workflow 
 - Existing deployment uses the Cloudflare API, not a linked Git build. The legacy worker name is retained to preserve links and data. Hosted staging verification is read-only; collector publishing remains disabled by default.
 - Fixed the incomplete staging deploy module list and added a regression test against the runtime import graph.
 - The original baseline Worker and isolated UK mirror/release Workers are not production-cutover targets; preserve their resources until independently verified. No public launch is authorized.
+
+### Independent UK staging cutover
+
+- Read-only D1 preflight confirmed 4,022 official-notice records, zero unapproved records, four expected tables, one isolated D1 binding, no secrets, no cron and disabled version preview URLs.
+- Initial UK version upload rejected a missing transitive import (`isro-feed.mjs`); no traffic or bindings changed. Added it to the upload and verified all eight module hashes. Corrected the repository's UK deploy manifest and regression test.
+- UK preview now serves version `03b38e6b-cab0-4525-9ccc-089d87b7156b`, built from migration commit `509acee96c53186b79a088768e39813b32a1c05b`. Rollback version: `e7303556-c3dc-4a3a-98c4-ff43fa87351f`. Post-cutover configuration checks confirmed the original isolated DB, no secrets or cron, and no additional version preview URLs.
+- Full-parity hosted smoke, unit/API and browser runs succeeded at `d9c31acbf2183450cf601b076d40656c453a8e1d`. Extended hosted checks cover both staging Workers; production and mirror watcher remain unchanged. Scheduled GitHub publishing is still disabled.

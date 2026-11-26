@@ -11,7 +11,7 @@ test("standalone UK Worker accepts exactly one UK data binding and no other capa
  assert.equal(validateIsolatedStagingState(state()),true);
  assert.deepEqual(UK_WORKER_MODULES,[
   "uk-release-worker.mjs","uk-release-db.mjs","official-feed.mjs",
-  "source-rights.mjs","india-employment-news.mjs","release-preview-ui.mjs","uk-mirror-status.mjs"
+  "source-rights.mjs","india-employment-news.mjs","release-preview-ui.mjs","uk-mirror-status.mjs","isro-feed.mjs"
  ]);
  for(const patch of [
   {bindings:[{type:"d1",name:"DB",database_id:"wrong"}]},
@@ -66,4 +66,19 @@ test("staging dry-run inspects exact DB and Worker without making any edits",asy
  assert.equal(calls.length,8);
  assert.ok(calls.every(c=>c.method==="GET"||c.method==="POST"));
  assert.equal(calls.some(c=>c.method==="PUT"),false);
+});
+
+test("isolated UK deployment manifest covers every transitive static local import",async()=>{
+ const {readFile}=await import("node:fs/promises");
+ const root=new URL("./",import.meta.url);
+ const pending=["uk-release-worker.mjs"],visited=new Set();
+ while(pending.length){
+  const name=pending.pop();
+  if(visited.has(name))continue;
+  visited.add(name);
+  const source=await readFile(new URL(name,root),"utf8");
+  for(const match of source.matchAll(/^(?:import|export)\s+(?:[^;\n]*?\s+from\s*)?["']\.\/([^"']+)["']/gm))pending.push(match[1]);
+ }
+ assert.equal(new Set(UK_WORKER_MODULES).size,UK_WORKER_MODULES.length);
+ assert.deepEqual([...UK_WORKER_MODULES].sort(),[...visited].sort());
 });
