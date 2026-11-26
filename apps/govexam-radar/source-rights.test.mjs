@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 import {OFFICIAL_SOURCE_RIGHTS,sourceRights,assertSourceRightsForCommercialRelease} from "./source-rights.mjs";
 const uk="uk-dfe-teaching-vacancies",mb="manitoba-jobs",india="india-employment-news",isro="india-isro-opportunities";
 test("source licence decisions are bounded and never assume one government's licence covers another",()=>{
- assert.equal(OFFICIAL_SOURCE_RIGHTS.length,4);
+ assert.equal(OFFICIAL_SOURCE_RIGHTS.length,5);
  assert.equal(new Set(OFFICIAL_SOURCE_RIGHTS.map(x=>x.id)).size,4);
  const dfe=sourceRights(uk),manitoba=sourceRights(mb),blocked=sourceRights(india);
  assert.equal(dfe.reuseStatus,"conditional_open_licence");
@@ -29,7 +29,7 @@ test("source licence decisions are bounded and never assume one government's lic
 });
 test("commercial release gate fails closed on Manitoba, India and unknown source",()=>{
  assert.equal(assertSourceRightsForCommercialRelease([uk]),true);
- assert.equal(assertSourceRightsForCommercialRelease([uk,isro]),true);
+ assert.equal(assertSourceRightsForCommercialRelease([uk,isro,'india-ssb-recruitment']),true);
  assert.throws(()=>assertSourceRightsForCommercialRelease([uk,mb]),/commercial_reuse_review_pending:manitoba-jobs/);
  assert.throws(()=>assertSourceRightsForCommercialRelease([india]),/commercial_reuse_review_pending/);
  assert.throws(()=>assertSourceRightsForCommercialRelease(["unknown"]),/unknown_official_source/);
@@ -38,7 +38,7 @@ test("commercial release gate fails closed on Manitoba, India and unknown source
 test("public UI attributes UK data and does not promote unapproved source feeds",async()=>{
  const code=await readFile(new URL("./official-ui.mjs",import.meta.url),"utf8");
  assert.match(code,/UK DfE listings: contains public sector information licensed under/);
- assert.match(code,/ISRO notices may appear after source checks/);
+ assert.match(code,/ISRO and SSB notices may appear after source checks/);
  assert.doesNotMatch(code,/Manitoba: official RSS factual summaries/);
  assert.doesNotMatch(code,/India · Employment News digest/);
  assert.doesNotMatch(code,/Contains public sector information licensed under the/);

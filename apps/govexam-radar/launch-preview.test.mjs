@@ -46,7 +46,7 @@ test('every public listing and change query enforces source rights in the databa
   const status=await (await get(db,'/api/ingestion-status')).json();
   assert.equal(status.openImportedNotices,1);assert.deepEqual(status.bySource.map(x=>x.sourceId),['uk-dfe-teaching-vacancies']);
   assert.ok(status.latest.every(x=>x.sourceId==='uk-dfe-teaching-vacancies'));
-  assert.deepEqual(status.automation.sources.map(x=>x.sourceId),['uk-dfe-teaching-vacancies','india-isro-opportunities']);
+  assert.deepEqual(status.automation.sources.map(x=>x.sourceId),['uk-dfe-teaching-vacancies','india-isro-opportunities','india-ssb-recruitment']);
   assert.equal(status.indiaSourceCheck.ready,false);assert.equal(status.automation.twoCycleCronGatePassed,false);
  }finally{sqlite.close();}
 });
@@ -106,5 +106,25 @@ test('paused community blocks new public interactions while retaining authentica
   for(const path of ['/','/lite']){const html=await (await get(db,path)).text();assert.match(html,/href="\/privacy"/);assert.match(html,/href="\/terms"/);}
   const lite=await (await get(db,'/lite')).text();assert.match(lite,/id="jobs"/);assert.match(lite,/src="\/lite\.js\?v=2\.7\.2"/);assert.doesNotMatch(lite,/Explore leads from the prototype/);
   for(const path of ['/privacy','/terms']){const r=await get(db,path);assert.equal(r.status,200);assert.match(await r.text(),/connect@yorphives\.com/);}
+ }finally{sqlite.close();}
+});
+
+test('SSB snapshot gate is independent of ISRO and cannot broaden the UK-only endpoint',async()=>{
+ const {sqlite,db,now,future,past}=fixture();try{
+  const source='india-ssb-recruitment',snapshot=now-2000;
+  const insert=sqlite.prepare('INSERT INTO official_job_notices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  for(const [id,seen] of [['ssb-current',snapshot],['ssb-missing',snapshot-1]])insert.run(id,source,id,'Sashastra Seema Bal','India','India','Unclassified','https://recruitment.ssb.gov.in/adv_newsUrl',past,future,now-60000,seen,'official_feed_unreviewed','IN','India','national','government_agency','open');
+  assert.equal((await get(db,'/api/notices?source='+source)).status,403);
+  const add=sqlite.prepare('INSERT INTO source_ingest_runs VALUES (?,?,?,?,?,?,?,?,?,?)');
+  for(const [id,ts] of [['old',now-3*3600000],['new',snapshot]])add.run('ssb-'+id,source,ts,ts+20,'ok',2,1,1,null,'{"origin":"scheduled","snapshot":"complete"}');
+  const response=await (await get(db,'/api/notices?country=India')).json();
+  assert.deepEqual(response.notices.map(x=>x.id),['ssb-current']);
+  assert.equal(response.indiaSourceChecks[source].ready,true);
+  assert.equal(response.indiaSourceCheck.ready,false);
+  assert.equal((await get(db,'/api/release-preview/notices?source='+source)).status,403);
+  const status=await (await get(db,'/api/ingestion-status')).json();
+  assert.ok(status.bySource.some(x=>x.sourceId===source&&x.count===1));
+  add.run('ssb-failed',source,now-100,now-100,'error',0,0,0,'blocked','{"origin":"scheduled","snapshot":"pending"}');
+  assert.equal((await get(db,'/api/notices?source='+source)).status,403);
  }finally{sqlite.close();}
 });
