@@ -8,7 +8,7 @@ export const ISRO_SOURCE=Object.freeze({
  termsUrl:'https://www.isro.gov.in/Website_Policy.html',country:'India'
 });
 const MAX_HTML=500000,MAX_ROBOTS=8192,MAX_ROWS=500,MAX_OPEN=200;
-const clean=value=>String(value??'').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
+export const clean=value=>String(value??'').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
  .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]*>/g,' ')
  .replace(/&(?:nbsp|amp|lt|gt|quot|apos|#39|rsquo|lsquo|ldquo|rdquo|ndash|mdash|bull);/gi,s=>({'&nbsp;':' ','&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&#39;':"'",'&rsquo;':"'",'&lsquo;':"'",'&ldquo;':'"','&rdquo;':'"','&ndash;':'–','&mdash;':'—','&bull;':'•'}[s.toLowerCase()]||' '))
  .replace(/&#(x[\da-f]+|\d+);/gi,(_,n)=>{const p=n[0].toLowerCase()==='x'?parseInt(n.slice(1),16):parseInt(n,10);return p>0&&p<=0x10ffff?String.fromCodePoint(p):' ';})
@@ -67,21 +67,25 @@ async function bounded(response,max){
  const decoder=new TextDecoder();let bytes=0,text='';
  try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>max){await reader.cancel();throw Error('source_too_large');}text+=decoder.decode(value,{stream:true});}return text+decoder.decode();}finally{reader.releaseLock();}
 }
-async function fetchSnapshot(fetcher){
+async function fetchSnapshot(fetcher,source=ISRO_SOURCE){
  const options={method:'GET',redirect:'manual',headers:{'Accept':'text/plain,text/html','User-Agent':'GlobalGovJobsSourceCheck/1.0'}};
- const robots=await fetcher(ISRO_SOURCE.robots,{...options,signal:AbortSignal.timeout(12000)});
+ const robots=await fetcher(source.robots,{...options,signal:AbortSignal.timeout(12000)});
  if(robots.status!==404&&robots.status!==200)throw Error('robots_http_'+robots.status);
  if(robots.status===404){try{await robots.body?.cancel();}catch{}}
  if(robots.status===200){const body=await bounded(robots,MAX_ROBOTS);if(!/text\/plain/i.test(robots.headers.get('content-type')||'')||/<\s*(?:html|doctype)\b/i.test(body))throw Error('robots_not_plain_text');if(body.split(/\r?\n/).some(line=>/^\s*disallow\s*:\s*[^\s#]/i.test(line)))throw Error('robots_rule_review_required');}
- const response=await fetcher(ISRO_SOURCE.url,{...options,signal:AbortSignal.timeout(12000)});
+ const response=await fetcher(source.url,{...options,signal:AbortSignal.timeout(12000)});
  if(response.status!==200)throw Error('source_http_'+response.status);
  if(!/html/i.test(response.headers.get('content-type')||''))throw Error('unexpected_source_type');
- return bounded(response,MAX_HTML);
+ return bounded(response,source.maxHtml||MAX_HTML);
 }
 const digest=async value=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(x=>x.toString(16).padStart(2,'0')).join('');
 export async function ingestIsro(db,fetcher=fetch,now=Date.now()){
+ return ingestIndianSnapshot(ISRO_SOURCE,parseIsroTable,db,fetcher,now);
+}
+export async function ingestIndianSnapshot(source,parse,db,fetcher=fetch,now=Date.now()){
+ if(!['india-isro-opportunities','india-ssb-recruitment'].includes(source.id))throw Error('unknown_snapshot_source');
  if(!db)throw Error('database_binding_required');
- const result={id:crypto.randomUUID(),sourceId:ISRO_SOURCE.id,startedAt:now,finishedAt:now,state:'error',httpStatus:null,received:0,accepted:0,discarded:0,errorCode:null};
+ const result={id:crypto.randomUUID(),sourceId:source.id,startedAt:now,finishedAt:now,state:'error',httpStatus:null,received:0,accepted:0,discarded:0,errorCode:null};
  let info={origin:'scheduled'};
  // A crash or timeout during collection must close the release gate. Record
  // an error-state attempt before touching source rows, then finalize it.
@@ -90,13 +94,13 @@ export async function ingestIsro(db,fetcher=fetch,now=Date.now()){
   if(claim?.success!==true&&claim?.meta?.changes!==1)throw Error('audit_claim_failed');
  }catch(error){console.error(JSON.stringify({event:'isro_audit_claim_failed',reason:String(error?.message||error)}));return {...result,errorCode:'audit_claim_failed'};}
  try{
-  const html=await fetchSnapshot(fetcher),parsed=parseIsroTable(html,now);result.httpStatus=200;result.received=parsed.received;result.discarded=Object.values(parsed.rejected).reduce((a,b)=>a+b,0);
+  const html=await fetchSnapshot(fetcher,source),parsed=parse(html,now);result.httpStatus=200;result.received=parsed.received;result.discarded=Object.values(parsed.rejected).reduce((a,b)=>a+b,0);
   for(let i=0;i<parsed.valid.length;i+=20){
    const batch=await Promise.all(parsed.valid.slice(i,i+20).map(async row=>{
-    const id=ISRO_SOURCE.id+':'+(await digest(row.sourceRef)).slice(0,32),hash=await digest(JSON.stringify([row.sourceRef,row.title,row.employer,row.closingAt]));
+    const id=source.id+':'+(await digest(row.sourceRef)).slice(0,32),hash=await digest(JSON.stringify([row.sourceRef,row.title,row.employer,row.closingAt]));
     return db.prepare("INSERT INTO official_job_notices(id,source_id,source_ref,title,employer,country,region,stream,apply_url,source_page,published_at,closing_at,first_seen_at,last_seen_at,evidence_sha256,review_state,life_status,jurisdiction_code,jurisdiction_name,government_tier,employer_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,employer=excluded.employer,region=excluded.region,stream=excluded.stream,published_at=excluded.published_at,closing_at=excluded.closing_at,last_seen_at=excluded.last_seen_at,evidence_sha256=excluded.evidence_sha256,life_status='open' WHERE excluded.last_seen_at>=official_job_notices.last_seen_at")
      .bind(id,row.sourceId,row.sourceRef,row.title,row.employer,row.country,row.region,row.stream,row.applyUrl,row.sourcePage,row.publishedAt,row.closingAt,now,now,hash,'official_feed_unreviewed','open',row.jurisdictionCode,row.jurisdictionName,row.governmentTier,row.employerType);
-   }));await db.batch(batch);
+   }));const writes=await db.batch(batch);if(writes.some(x=>x?.success===false))throw Error('snapshot_write_failed');
   }
   result.accepted=parsed.valid.length;result.state='ok';info={origin:'scheduled',snapshot:'complete',rejected:parsed.rejected};
  }catch(error){result.errorCode=String(error?.message||error).slice(0,100);console.error(JSON.stringify({event:'isro_ingestion_failed',reason:result.errorCode}));}
@@ -116,9 +120,13 @@ export async function ingestIsro(db,fetcher=fetch,now=Date.now()){
 // whole source table was parsed. An error immediately closes the gate. This
 // gate is not configurable through any public request parameter.
 export async function isroPublicationGate(db,now=Date.now()){
+ return indianSnapshotGate(ISRO_SOURCE.id,db,now);
+}
+export async function indianSnapshotGate(sourceId,db,now=Date.now()){
+ if(!['india-isro-opportunities','india-ssb-recruitment'].includes(sourceId))return {ready:false,reason:'unknown_source'};
  if(!db)return {ready:false,reason:'database_unavailable'};
  try{
-  const r=await db.prepare("SELECT started_at AS startedAt,finished_at AS finishedAt,state,details FROM source_ingest_runs WHERE source_id=? AND started_at>=? AND details LIKE '%\"origin\":\"scheduled\"%' ORDER BY started_at DESC,finished_at DESC LIMIT 2").bind(ISRO_SOURCE.id,now-8*3600000).all();
+  const r=await db.prepare("SELECT started_at AS startedAt,finished_at AS finishedAt,state,details FROM source_ingest_runs WHERE source_id=? AND started_at>=? AND details LIKE '%\"origin\":\"scheduled\"%' ORDER BY started_at DESC,finished_at DESC LIMIT 2").bind(sourceId,now-8*3600000).all();
   const rows=r.results||[],latest=rows[0];
   // Retries or duplicate delivery of one Cron event cannot count as two
   // independent cycles. Normal runs are three hours apart; allow one hour

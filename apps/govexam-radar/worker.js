@@ -17,6 +17,7 @@ import { MODERATION_HTML, MODERATION_JS } from "./moderation-ui.mjs";
 import { PORTABLE_JS } from "./portable-bookmarks.mjs";
 import { LITE_HTML, LITE_CSS, LITE_JS } from "./lite-ui.mjs";
 import { ingestIsro } from "./isro-feed.mjs";
+import { ingestSsb } from "./ssb-feed.mjs";
 // Cloudflare's scheduledTime is the *intended* UTC fire time, not when a
 // delayed invocation happens to execute. Do not use Date.now() for routing.
 // Keep the legacy three expressions until the staging schedule change sticks.
@@ -63,8 +64,9 @@ function policyPage(kind){
  <h2>Earlier community feature</h2><p>Community posting is paused. If you previously used it, your account, posts and replies may still be stored. Contact us to ask about access or deletion. Authenticated export and account deletion remain available to existing device credentials.</p>
  <h2>Contact</h2><p>For privacy questions or deletion requests, write to <a href="mailto:connect@yorphives.com">connect@yorphives.com</a>. External government websites have their own privacy policies.</p>`:`
  <h2>Check the official notice</h2><p>globalGOV is an independent directory and is not a government service. Jobs and dates can change or close early. We do not individually verify every listing. Check the original authority's notice for the closing time, eligibility, fees and how to apply.</p>
- <h2>Coverage</h2><p>Imported notices currently include UK Department for Education Teaching Vacancies. ISRO notices may appear after their source checks succeed. Other government job websites are provided as a directory; a link does not mean a vacancy is open.</p>
+ <h2>Coverage</h2><p>Imported notices currently include UK Department for Education Teaching Vacancies. ISRO and SSB notices may appear after their source checks succeed. Other government job websites are provided as a directory; a link does not mean a vacancy is open.</p>
  <h2>Source credit</h2><p>UK Teaching Vacancies information contains public sector information licensed under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a> (© Crown copyright). We do not charge to follow a listing or charge a fee or commission for contacting, interviewing or hiring a respondent to reused listings.</p>
+ <p>SSB records, when available, are attributed to Sashastra Seema Bal, Ministry of Home Affairs, Government of India, under its <a href="https://recruitment.ssb.gov.in/websitepolicyUrl">website policy</a>. Open the official advertisement table and check the advertised post and dates.</p>
  <p>ISRO records, when available, are sourced from the Indian Space Research Organisation / Department of Space, Government of India, under its <a href="https://www.isro.gov.in/Website_Policy.html">website policy</a>.</p>
  <h2>Contact</h2><p>Tell us about an incorrect or broken link at <a href="mailto:connect@yorphives.com">connect@yorphives.com</a>.</p>`;
  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · globalGOV</title><style>body{font:17px/1.6 system-ui,sans-serif;color:#203147;background:#f5f7fb;margin:0}main{max-width:740px;margin:32px auto;padding:24px;background:white;border-radius:16px}a{color:#234da9}h1,h2{line-height:1.25}h2{font-size:20px;margin-top:28px}p{overflow-wrap:anywhere}</style></head><body><main><p><a href="/">← Back to globalGOV</a></p><h1>${title}</h1><p>Preview information · 25 November 2026</p>${body}</main></body></html>`;
@@ -116,7 +118,7 @@ export default {
     if (path === "/sw.js") return respond(SW_JS, 200, "text/javascript; charset=utf-8", { "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" });
     if (path === "/icon.svg") return respond(ICON, 200, "image/svg+xml", { "Cache-Control": "public, max-age=86400" });
     if (path === "/manifest.webmanifest") return respond(MANIFEST, 200, "application/manifest+json");
-    if (path === "/openapi.json") { const publicSpec=structuredClone(OPENAPI); publicSpec.info.version=VERSION; publicSpec.info.description="Government recruitment website directory and source-gated UK and ISRO notices. Check the original notice before applying."; delete publicSpec.paths["/api/moderation/reports"]; delete publicSpec.paths["/api/moderation/decide"]; return JSONResponse(publicSpec, 200, "public, max-age=3600"); }
+    if (path === "/openapi.json") { const publicSpec=structuredClone(OPENAPI); publicSpec.info.version=VERSION; publicSpec.info.description="Government recruitment website directory and source-gated UK, ISRO and SSB notices. Check the original notice before applying."; delete publicSpec.paths["/api/moderation/reports"]; delete publicSpec.paths["/api/moderation/decide"]; return JSONResponse(publicSpec, 200, "public, max-age=3600"); }
     if (path === "/robots.txt") return respond("User-agent: *\nDisallow: /\n", 200, "text/plain; charset=utf-8");
     if (path === "/api/health") return JSONResponse({ status: "ok", service: "hqventures-govradar", version: VERSION, serverTime: new Date().toISOString() }, 200, "no-store");
     if(path==="/release-preview")return respond(RELEASE_PREVIEW_HTML,200,"text/html; charset=utf-8",{"Content-Security-Policy":CSP,"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
@@ -129,7 +131,7 @@ export default {
     if (path === "/api/release-preview/notices") return serveOfficialNotices(env?.DB,url.searchParams,"uk_only_release_preview");
     if (path === "/api/ingestion-status") return servePublicIngestionStatus(env?.DB);
     if (path === "/api/notice-changes") return serveNoticeChanges(env?.DB,url.searchParams,"approved_staging");
-    if (path === "/api/catalog") return JSONResponse({ version: VERSION, catalogUpdatedAt: "2026-11-16", sources: SOURCES, leads: [], verifiedListings: [], directoryTotal: SOURCES.length, newRegionalPortals: REGIONAL_SOURCES.length, notice: "State, province, devolved, prefectural and municipal portals are directories; they are not automatically imported vacancies. Source-gated UK and ISRO records are at /api/notices. Email is not delivered." }, 200, "no-store");
+    if (path === "/api/catalog") return JSONResponse({ version: VERSION, catalogUpdatedAt: "2026-11-16", sources: SOURCES, leads: [], verifiedListings: [], directoryTotal: SOURCES.length, newRegionalPortals: REGIONAL_SOURCES.length, notice: "State, province, devolved, prefectural and municipal portals are directories; they are not automatically imported vacancies. Source-gated UK, ISRO and SSB records are at /api/notices. Email is not delivered." }, 200, "no-store");
     if (path === "/api/check") {
       const source = SOURCES.find(s=>s.id===url.searchParams.get("id"));
       if(!source)return JSONResponse({error:"unknown_source"},404,"no-store");
@@ -152,8 +154,8 @@ export default {
       else if(task==="manitoba")result=await ingestManitoba(env.DB);
       else if(task==="portals"){
         // A failure in either independent task must not prevent the other.
-        const outcomes=await Promise.allSettled([runScheduledPortalChecks(env.DB,SOURCES),ingestIsro(env.DB)]);
-        result={portals:outcomes[0].status,isro:outcomes[1].status};
+        const outcomes=await Promise.allSettled([runScheduledPortalChecks(env.DB,SOURCES),ingestIsro(env.DB),ingestSsb(env.DB)]);
+        result={portals:outcomes[0].status,isro:outcomes[1].status,ssb:outcomes[2].status};
       }
       else {console.error(JSON.stringify({event:"unrecognized_or_disabled_cron",cron:controller?.cron||""}));return;}
       await expireKnownDeadlines(env.DB);

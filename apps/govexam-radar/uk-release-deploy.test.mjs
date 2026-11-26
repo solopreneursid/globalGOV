@@ -11,7 +11,7 @@ test("standalone UK Worker accepts exactly one UK data binding and no other capa
  assert.equal(validateIsolatedStagingState(state()),true);
  assert.deepEqual(UK_WORKER_MODULES,[
   "uk-release-worker.mjs","uk-release-db.mjs","official-feed.mjs",
-  "source-rights.mjs","india-employment-news.mjs","release-preview-ui.mjs","uk-mirror-status.mjs","isro-feed.mjs"
+  "source-rights.mjs","india-employment-news.mjs","release-preview-ui.mjs","uk-mirror-status.mjs","isro-feed.mjs","ssb-feed.mjs"
  ]);
  for(const patch of [
   {bindings:[{type:"d1",name:"DB",database_id:"wrong"}]},

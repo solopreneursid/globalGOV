@@ -1,6 +1,7 @@
 // Evidence-based notice lifecycle. A missing notice on a partial page is NOT a withdrawal.
-import {allowedCommercialPreviewSources,allowedIsroPreviewSource} from "./source-rights.mjs";
+import {allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
 import {ISRO_SOURCE,isroPublicationGate} from "./isro-feed.mjs";
+import {SSB_SOURCE,ssbPublicationGate} from "./ssb-feed.mjs";
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
 export async function expireKnownDeadlines(db,now=Date.now()){
  if(!db)return {expired:0,error:"no_database"};
@@ -23,10 +24,11 @@ export async function serveNoticeChanges(db,params,scope="research"){
   if(scope==="uk_only_release_preview"||scope==="approved_staging"){
    const allowed=allowedCommercialPreviewSources();
    const gate=scope==="approved_staging"?await isroPublicationGate(db):{ready:false};
-   if(gate.ready)allowed.push(allowedIsroPreviewSource());
+   const ssbGate=scope==='approved_staging'?await ssbPublicationGate(db):{ready:false};
+   if(gate.ready)allowed.push(allowedIsroPreviewSource());if(ssbGate.ready)allowed.push(allowedSsbPreviewSource());
    where.push("r.source_id IN ("+allowed.map(()=>"?").join(",")+")","r.source_id=j.source_id");
    args.push(...allowed);
-   if(gate.ready){where.push("(r.source_id!=? OR (j.last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))");args.push(ISRO_SOURCE.id,gate.snapshotAt,ISRO_SOURCE.id,gate.snapshotAt,gate.snapshotAt);}
+   for(const [source,g] of [[ISRO_SOURCE,gate],[SSB_SOURCE,ssbGate]])if(g.ready){where.push("(r.source_id!=? OR (j.last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))");args.push(source.id,g.snapshotAt,source.id,g.snapshotAt,g.snapshotAt);}
   }
   if(country){where.push("j.country=?");args.push(country);}
   const result=await db.prepare("SELECT r.notice_id as noticeId,r.source_id as sourceId,r.observed_at as observedAt,r.old_title as previousTitle,r.new_title as title,r.old_closing_at as previousClosingAt,r.new_closing_at as closingAt,j.country,j.jurisdiction_name as jurisdiction,j.source_page as sourceUrl FROM notice_revisions r JOIN official_job_notices j ON j.id=r.notice_id WHERE "+where.join(" AND ")+" ORDER BY r.observed_at DESC LIMIT ?").bind(...args,limit).all();

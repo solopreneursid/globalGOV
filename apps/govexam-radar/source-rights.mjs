@@ -26,6 +26,17 @@ const RIGHT_ENTRIES=[
   note:"The permission covers ISRO/DOS material on its site, with accurate reproduction and prominent attribution; identified third-party material is excluded. Import only named ISRO/DOS centres and official ISRO links. Not a government service or endorsement."
  },
  {
+  id:"india-ssb-recruitment",
+  reuseStatus:"conditional_ssb_website_policy",
+  commercialReuseApprovedForCurrentFields:true,
+  licence:"SSB recruitment website copyright policy; accurate reproduction and prominent attribution",
+  licenceUrl:"https://recruitment.ssb.gov.in/websitepolicyUrl",
+  termsUrl:"https://recruitment.ssb.gov.in/websitepolicyUrl",
+  officialSourceUrl:"https://recruitment.ssb.gov.in/adv_newsUrl",
+  attribution:"Source: Sashastra Seema Bal, Ministry of Home Affairs, Government of India.",
+  note:"Official advertisement metadata only. Third-party material excluded. Use the official advertisement table; no invented direct apply link. Date-only deadlines are visibility boundaries."
+ },
+ {
   id:"manitoba-jobs",
   reuseStatus:"source_specific_review_required",
   commercialReuseApprovedForCurrentFields:false,
@@ -76,3 +87,5 @@ export function allowedIsroPreviewSource(){
  assertSourceRightsForCommercialRelease([id]);
  return id;
 }
+
+export function allowedSsbPreviewSource(){const id="india-ssb-recruitment";assertSourceRightsForCommercialRelease([id]);return id;}
