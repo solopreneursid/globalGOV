@@ -27,3 +27,10 @@ test('monitor rejects non-HTTPS targets and records failed requests',async()=>{
  const report=await monitor('https://example.org',async()=>new Response('down',{status:503}));
  assert.equal(report.status,'error');assert.ok(report.failures.includes('health_request_failed'));
 });
+
+test('monitor accepts only the exact SSB official advertisement index',()=>{
+ const x=snapshot(),row={sourceId:'india-ssb-recruitment',country:'India',sourceUrl:'https://recruitment.ssb.gov.in/adv_newsUrl',closingAt:new Date(now+86400000).toISOString(),lastSeenAt:now};
+ x.notices.sources.push({id:row.sourceId,commercialReuseApprovedForCurrentFields:true});x.notices.notices.push(row);x.india.notices.push(row);
+ assert.deepEqual(checkSnapshot(x,now),[]);
+ row.sourceUrl+='?redirect=https://evil.example';assert.ok(checkSnapshot(x,now).includes('unsafe_notice_url'));
+});

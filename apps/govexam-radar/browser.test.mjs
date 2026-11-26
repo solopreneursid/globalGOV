@@ -194,3 +194,24 @@ test('privacy, contact and paused community controls are available',async()=>{
   const data=await page.request.get(origin+'/api/catalog');assert.deepEqual((await data.json()).leads,[]);
  }finally{await page.close();}
 });
+
+test('an eligible SSB notice can be viewed, saved, exported and shown on the low-data page',async()=>{
+ // This record is synthetic and exists only in the browser test.
+ const sample={id:'test-ssb',title:'Test SSB vacancy',employer:'Sashastra Seema Bal',country:'India',jurisdiction:'India',jurisdictionCode:'IN',region:'All India',stream:'Technical',closingAt,lastSeenAt:Date.now(),sourceId:'india-ssb-recruitment',sourceUrl:'https://recruitment.ssb.gov.in/adv_newsUrl'};
+ const page=await browser.newPage({viewport:{width:375,height:820}});
+ try{
+  await page.route('**/api/notices?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({total:1,notices:[sample]})}));
+  await page.goto(origin,{waitUntil:'domcontentloaded'});await page.locator('#official-notice-grid article').first().waitFor();
+  assert.match(await page.locator('#official-notice-grid').innerText(),/SSB · Government of India/);
+  assert.equal(await page.locator('#official-notice-grid a[href="https://recruitment.ssb.gov.in/adv_newsUrl"]').count(),1);
+  await page.locator('#official-notice-grid [data-save-notice]').click();await page.locator('#nav-mobile-saved').click();
+  assert.match(await page.locator('#saved-official-notices').innerText(),/Test SSB vacancy/);
+  const downloadPromise=page.waitForEvent('download');await page.locator('#portable-export').click();
+  const stream=await (await downloadPromise).createReadStream();let raw='';for await(const chunk of stream)raw+=chunk;
+  const exported=JSON.parse(raw);assert.equal(exported.bookmarks[0].sourceId,'india-ssb-recruitment');assert.equal(exported.bookmarks[0].sourceUrl,sample.sourceUrl);
+  await page.goto(origin+'/lite',{waitUntil:'domcontentloaded'});await page.locator('#jobs .card').first().waitFor();
+  assert.match(await page.locator('#jobs').innerText(),/Test SSB vacancy/);assert.match(await page.locator('#jobs').innerText(),/Source: SSB, Government of India/);
+  assert.equal(await page.locator('#jobs a[href="https://recruitment.ssb.gov.in/adv_newsUrl"]').count(),1);
+  assert.match(await page.locator('#credit').innerText(),/SSB/);
+ }finally{await page.close();}
+});
