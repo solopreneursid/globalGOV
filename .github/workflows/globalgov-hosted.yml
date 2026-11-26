@@ -1,0 +1,55 @@
+name: globalGOV hosted staging verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/govexam-radar/**'
+      - '.github/workflows/globalgov-hosted.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hosted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify renamed staging and publication boundaries
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const base='https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev';
+          async function get(path,status=200){
+            const r=await fetch(base+path,{cache:'no-store',signal:AbortSignal.timeout(25000)});
+            assert.equal(r.status,status,path);
+            return r;
+          }
+          const health=await (await get('/api/health')).json();
+          assert.equal(health.status,'ok');
+          assert.equal(health.service,'hqventures-govradar');
+          for(const route of ['/','/lite','/release-preview','/privacy','/terms']){
+            const page=await get(route+'?migration=globalgov');
+            assert.match(page.headers.get('x-robots-tag')||'',/noindex/i,route);
+            assert.match(await page.text(),/globalGOV/,route);
+          }
+          for(const route of ['/official.js','/lite.js','/release-preview.js']){
+            new Function(await (await get(route)).text());
+          }
+          const all=await (await get('/api/notices?limit=50')).json();
+          assert.equal(all.releaseProfile,'approved_staging');
+          assert.equal(all.publicLaunchAuthorized,false);
+          const allowed=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities']);
+          assert.ok(Array.isArray(all.notices));
+          assert.ok(all.notices.every(n=>allowed.has(n.sourceId)));
+          assert.ok(all.sources.every(s=>allowed.has(s.id)&&s.commercialReuseApprovedForCurrentFields===true));
+          assert.ok(all.indiaSourceCheck.ready||!all.notices.some(n=>n.sourceId==='india-isro-opportunities'));
+          const uk=await (await get('/api/release-preview/notices?limit=30')).json();
+          assert.equal(uk.releaseProfile,'uk_only_release_preview');
+          assert.equal(uk.publicLaunchAuthorized,false);
+          assert.ok(uk.notices.every(n=>n.sourceId==='uk-dfe-teaching-vacancies'));
+          const denied=await (await get('/api/notices?source=manitoba-jobs',403)).json();
+          assert.equal(denied.error,'source_not_approved_for_release_preview');
+          console.log('Hosted globalGOV branding, scripts, noindex, health and source boundaries verified');
+          NODE

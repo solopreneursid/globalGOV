@@ -34,3 +34,22 @@ test("rejects wrong database, extra bindings or duplicate binding names",()=>{
  assert.throws(()=>deploymentPlan(STAGING_WORKER,[...settings(),{type:"plain_text",name:"OTHER"}],secretList()),/unexpected_worker_binding_inventory/);
  assert.throws(()=>deploymentPlan(STAGING_WORKER,[settings()[0],settings()[0]],secretList()),/unexpected_worker_binding_inventory/);
 });
+
+test("staging deploy manifest covers all transitive static local imports",async()=>{
+ const {readFile}=await import("node:fs/promises");
+ const root=new URL("./",import.meta.url);
+ const deployment=await readFile(new URL("deploy.mjs",root),"utf8");
+ const manifest=deployment.match(/const MODULES=\[([\s\S]*?)\];/);
+ assert.ok(manifest,"deployment module list not found");
+ const declared=[...manifest[1].matchAll(/"([^"]+)"/g)].map(x=>x[1]);
+ assert.equal(new Set(declared).size,declared.length,"duplicate runtime modules");
+ const visited=new Set(),pending=["worker.js"];
+ while(pending.length){
+  const file=pending.pop();
+  if(visited.has(file))continue;
+  visited.add(file);
+  const code=await readFile(new URL(file,root),"utf8");
+  for(const match of code.matchAll(/^(?:import|export)\s+(?:[^;\n]*?\s+from\s*)?["']\.\/([^"']+)["']/gm))pending.push(match[1]);
+ }
+ assert.deepEqual([...declared].sort(),[...visited].sort(),"deployment manifest differs from runtime import graph");
+});
