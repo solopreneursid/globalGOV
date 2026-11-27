@@ -69,11 +69,15 @@ test("watchdog detects app, scheduler, backup and disk failures without hiding t
 
 test("health event persistence deduplicates open incidents", async () => {
   const calls = [];
-  const pool = { async query(sql, values) { calls.push({ sql, values }); return { rowCount: 0, rows: [] }; } };
+  const pool = { async query(sql, values) {
+    calls.push({ sql, values });
+    if (sql.startsWith("SELECT id,component,event_code")) return { rowCount: 0, rows: [] };
+    return { rowCount: 0, rows: [] };
+  } };
   const result = await persistHealthChecks(pool, {
     checkedAt: 123,
     checks: [{ component: "application", severity: "critical", eventCode: "application_unreachable", details: {} }]
   });
   assert.equal(result[0].state, "already_open");
-  assert.match(calls[0].sql, /NOT EXISTS/);
+  assert.match(calls[1].sql, /NOT EXISTS/);
 });
