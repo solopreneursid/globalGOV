@@ -1,0 +1,42 @@
+name: globalGOV Indian source compatibility
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/govexam-radar/probe-isro.mjs'
+      - 'apps/govexam-radar/probe-ssb.mjs'
+      - 'apps/govexam-radar/isro-feed.mjs'
+      - 'apps/govexam-radar/ssb-feed.mjs'
+      - '.github/workflows/globalgov-india-source-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [isro, ssb]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe official source and actual parser (read only)
+        shell: bash
+        run: |
+          set +e
+          node "apps/govexam-radar/probe-${{ matrix.source }}.mjs" > source-report.jsonl
+          result=$?
+          cat source-report.jsonl
+          exit "$result"
+      - name: Preserve bounded source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-report-${{ matrix.source }}
+          path: source-report.jsonl
+          retention-days: 14
+          if-no-files-found: error

@@ -18,3 +18,8 @@ Status is source-specific; a public URL or a government domain does not itself g
 ## Production gate
 
 For every candidate retain source URL, policy URL/date, fields permitted, explicit first-party scope, robots/access result, date semantics, parser fixtures, approval decision, and independent native audit evidence. No fabricated vacancies or guessed deadlines. Links remain useful where source reuse is blocked. Source permission requests have not been sent.
+
+## ISRO current-source review — 2026-11-27
+Official table https://www.isro.gov.in/ViewAllOpportunities.html includes older closed notices and entries with blank closing dates. For example the URSC 04/2026 detailed notice https://www.isro.gov.in/URSCRecruitment13.html records an extension to 20 November 2026, already elapsed. Do not use an upload or opening date as a closing date. A future extension requires evidence from the exact official notice. The latest native audit inspected 128 entries, rejected 51 for missing/invalid fields, 49 for dates outside the current window, 26 for ownership and 2 for field length; accepted zero. This is not evidence that every ISRO centre has zero opportunities, only that the adapter found no publishable records. Keep the conservative publication gate and qualify official detail-document extraction separately.
+
+SSB source policy was checked again: https://recruitment.ssb.gov.in/websitepolicyUrl allows accurate first-party reuse with attribution. The public advertisement table contains older advertisements with explicit dates; do not manufacture open jobs. A read-only parser probe does not count toward scheduled publication proof.

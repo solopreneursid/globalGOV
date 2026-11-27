@@ -12,7 +12,7 @@ async function readBounded(response,limit){
 try{
  const robots=await fetch(origin+'/robots.txt',options);
  const body=await readBounded(robots,8192);
- console.log(JSON.stringify({stage:'robots',status:robots.status,location:robots.headers.get('location'),contentType:robots.headers.get('content-type'),body:body.slice(0,3000)}));
+ console.log(JSON.stringify({stage:'robots',status:robots.status,location:robots.headers.get('location'),contentType:robots.headers.get('content-type')}));
  if(robots.status!==404&&robots.status!==200)throw Error('robots_unavailable_stop');
  if(robots.status===200&&(/html/i.test(robots.headers.get('content-type')||'')||/<\s*(?:html|doctype)\b/i.test(body)))throw Error('robots_not_plain_text_stop');
  if(robots.status===200&&body.split(/\r?\n/).some(line=>/^\s*disallow\s*:\s*[^\s#]/i.test(line)))throw Error('robots_rule_needs_review_stop');
