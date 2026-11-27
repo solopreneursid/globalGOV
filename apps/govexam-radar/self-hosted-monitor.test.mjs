@@ -16,8 +16,11 @@ function healthyPool() {
         return { rows: [{ task: "portals", state: "ok", started_at: 1000, finished_at: 2000 }] };
       }
       if (sql.startsWith("SELECT finished_at")) {
-        return { rows: [{ finished_at: 3000, state: "ok", archive_verified_at: 3000, document_archive_verified_at: 3000,
-          restore_verified_at: 3000, document_restore_verified_at: 3000 }] };
+        return { rows: [{ finished_at: 3000, state: "ok", archive_verified_at: 3000,
+          document_archive_verified_at: 3000 }] };
+      }
+      if (sql.startsWith("SELECT MAX(restore_verified_at)")) {
+        return { rows: [{ db_restore_at: 3000, document_restore_at: 3000 }] };
       }
       if (sql.startsWith("SELECT source_id,state")) {
         return { rows: [
@@ -51,6 +54,7 @@ test("watchdog detects app, scheduler, backup and disk failures without hiding t
       if (sql.startsWith("SELECT version")) return { rows: [] };
       if (sql.startsWith("SELECT task,state")) return { rows: [{ task: "uk", state: "error", error_code: "timeout" }] };
       if (sql.startsWith("SELECT finished_at")) return { rows: [] };
+      if (sql.startsWith("SELECT MAX(restore_verified_at)")) return { rows: [{ db_restore_at: null, document_restore_at: null }] };
       if (sql.startsWith("SELECT source_id,state")) return { rows: [] };
       return { rowCount: 1, rows: [] };
     }
