@@ -183,6 +183,7 @@ async function cached(request,ttl,task){
  }
  return task();
 }
+function publicErrorCode(error){const code=error?.code||error?.message||'';return typeof code==='string'&&/^[a-z0-9_]{1,80}$/.test(code)?code:'upstream_unavailable';}
 export async function handleUsajobsHistory(request,{fetcher=fetch,now=Date.now()}={}){
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
  let filters;
@@ -194,7 +195,7 @@ export async function handleUsajobsHistory(request,{fetcher=fetch,now=Date.now()
    const body=await boundedJson(upstream,fetcher,MAX_HISTORY_BYTES);
    const parsed=parseUsajobsHistoricPage(body,now);
    return json({...parsed,retrievedAt:new Date(now).toISOString(),source:'USAJOBS Historic JOAs public data',sourceUrl:SOURCE_DOC,notice:'This page contains only records whose effective closing date has passed. Historical records are not open vacancies.'},200,'public, max-age=300, s-maxage=300');
-  }catch(error){return json({error:error.code||'upstream_unavailable',retryAfter:error.retryAfter||null},error.status||502);}
+  }catch(error){return json({error:publicErrorCode(error),retryAfter:error.retryAfter||null},error.status||502);}
  });
 }
 const TEXT_FIELDS=[
@@ -245,7 +246,7 @@ export async function handleUsajobsAnnouncementText(request,{fetcher=fetch,now=D
    const body=await boundedJson(url,fetcher,MAX_TEXT_BYTES);
    const announcement=parseUsajobsAnnouncementText(body,control);
    return json({announcement,retrievedAt:new Date(now).toISOString(),source:'USAJOBS Announcement Text public data',sourceUrl:TEXT_DOC,notice:'Archived announcement text is provided for research. It is not an active application instruction.'},200,'public, max-age=3600, s-maxage=3600');
-  }catch(error){return json({error:error.code||'upstream_unavailable',retryAfter:error.retryAfter||null},error.status||502);}
+  }catch(error){return json({error:publicErrorCode(error),retryAfter:error.retryAfter||null},error.status||502);}
  });
 }
 export const USAJOBS_HISTORY_SOURCE_DOC=SOURCE_DOC;

@@ -51,3 +51,8 @@ test('continuation token is decoded once and forwarded under documented lowercas
  const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27&cursor=next%253D%253D'),{now,fetcher:async(url)=>{const u=new URL(url);assert.equal(u.searchParams.get('continuationtoken'),'next==');assert.equal(u.searchParams.has('continuationToken'),false);return Response.json(page([],null));}});
  assert.equal(r.status,200);
 });
+
+test('upstream schema errors are exposed as bounded stable codes, not swallowed as network failures',async()=>{
+ const response=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async()=>Response.json({paging:{metadata:{totalCount:1,pageSize:500}},data:{unexpected:true}})});
+ assert.equal(response.status,502);assert.equal((await response.json()).error,'historic_schema_changed');
+});

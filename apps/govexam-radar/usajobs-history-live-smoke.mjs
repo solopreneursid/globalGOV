@@ -4,7 +4,17 @@ const now=new Date(),end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(
 const iso=d=>d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
 const q=new URLSearchParams({series:'2210',closeFrom:iso(start),closeTo:iso(end)});
 const page=await fetch(base+'/api/usajobs/history?'+q.toString(),{redirect:'error',signal:AbortSignal.timeout(25000)});
-assert.equal(page.status,200,'staging history API must respond 200');
+if(!page.ok){
+ const body=await page.json().catch(()=>({}));
+ const upstream=new URL('https://data.usajobs.gov/api/historicjoa');
+ upstream.searchParams.set('PositionSeries','2210');
+ upstream.searchParams.set('StartPositionCloseDate',start.toLocaleDateString('en-US',{timeZone:'UTC'}));
+ upstream.searchParams.set('EndPositionCloseDate',end.toLocaleDateString('en-US',{timeZone:'UTC'}));
+ const direct=await fetch(upstream,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Accept:'application/json'}});
+ const location=direct.headers.get('location');
+ const redirect=location?new URL(location,upstream).origin+new URL(location,upstream).pathname:'none';
+ throw new Error('staging_http_'+page.status+'_worker_error_'+String(body.error||'unknown')+'_direct_upstream_http_'+direct.status+'_type_'+String(direct.headers.get('content-type')||'none')+'_redirect_'+redirect);
+}
 const data=await page.json();
 assert.ok(Array.isArray(data.records));assert.ok(Number.isSafeInteger(data.totalCount));assert.ok(data.records.length<=1000);assert.equal(data.source,'USAJOBS Historic JOAs public data');
 assert.ok(data.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)));
