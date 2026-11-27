@@ -167,7 +167,7 @@ export default {
       else if(task==="manitoba")result=await ingestManitoba(env.DB);
       else if(task==="portals"){
         // A failure in either independent task must not prevent the other.
-        const outcomes=await Promise.allSettled([runScheduledPortalChecks(env.DB,SOURCES),ingestIsro(env.DB),ingestSsb(env.DB)]);
+        const outcomes=await Promise.allSettled([runScheduledPortalChecks(env.DB,SOURCES),ingestIsro(env.DB),ingestSsb(env.DB, fetch, Date.now(), { automatedAccessApproved: env?.SSB_AUTOMATED_ACCESS_APPROVED === "true" })]);
         result={portals:outcomes[0].status,isro:outcomes[1].status,ssb:outcomes[2].status};
       }
       else {console.error(JSON.stringify({event:"unrecognized_or_disabled_cron",cron:controller?.cron||""}));return;}
