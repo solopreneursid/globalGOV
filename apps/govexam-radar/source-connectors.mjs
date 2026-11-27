@@ -265,7 +265,7 @@ export async function fetchOfficialSource({
       await robots.body?.cancel().catch(() => {});
       throw new Error("robots_content_type_unconfirmed");
     }
-    const robotsBody = Buffer.from(await readBounded(robots, 8192)).toString("utf8");
+    const robotsBody = new TextDecoder("utf-8", { fatal: true }).decode(await readBounded(robots, 8192));
     const decision = parseRobotsRules(robotsBody, userAgent, target.pathname + target.search);
     if (!decision.allowed) throw new Error("robots_disallow");
   } else {
