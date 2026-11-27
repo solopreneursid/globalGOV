@@ -7,7 +7,7 @@ import { once } from "node:events";
 import { pathToFileURL } from "node:url";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { decodeBackupKey } from "./encrypted-backup.mjs";
-import { decryptBackupForRestore, encryptReadableToFile } from "./postgres-backup.mjs";
+import { decryptBackupForRestore, encryptReadableToFile } from "./backup-crypto.mjs";
 
 const HASH = /^[a-f0-9]{64}$/;
 const PREFIX = /^[a-f0-9]{2}$/;
