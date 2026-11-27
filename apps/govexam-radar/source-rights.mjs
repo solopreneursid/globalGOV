@@ -34,7 +34,8 @@ const RIGHT_ENTRIES=[
   termsUrl:"https://recruitment.ssb.gov.in/websitepolicyUrl",
   officialSourceUrl:"https://recruitment.ssb.gov.in/adv_newsUrl",
   attribution:"Source: Sashastra Seema Bal, Ministry of Home Affairs, Government of India.",
-  note:"Official advertisement metadata only. Third-party material excluded. Use the official advertisement table; no invented direct apply link. Date-only deadlines are visibility boundaries."
+  automatedAccessStatus:"clarification_required",
+  note:"Accurate attributed reproduction is distinct from permission to automate collection. The robots.txt endpoint returned HTTP 302 to a login route; unattended collection is disabled pending clarification. Official advertisement metadata only; third-party material excluded. Use the official advertisement table; no invented direct apply link. Date-only deadlines are visibility boundaries."
  },
  {
   id:"manitoba-jobs",
