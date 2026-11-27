@@ -77,12 +77,14 @@ export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) 
   let inserted = 0;
   for (const source of sources) {
     const policy = sourceAutomationPolicy(source);
-    const methods = [...new Map(policy.allowedPaths.flatMap(path =>
-      (policy.allowedContentTypes.length ? policy.allowedContentTypes : ["text/html"]).map(contentType => {
-        const method = { method: "GET", path, contentType };
-        return [path + "\\n" + contentType, method];
-      })
-    )).values()];
+    const registeredPath = new URL(source.url).pathname;
+    const permittedPath = policy.allowedPaths.find(path =>
+      registeredPath === path || (path.endsWith("/") && registeredPath.startsWith(path))
+    );
+    const methods = permittedPath
+      ? [...new Set(policy.allowedContentTypes.length ? policy.allowedContentTypes : ["text/html"])]
+        .map(contentType => ({ method: "GET", path: permittedPath, contentType }))
+      : [];
     const result = await pool.query(
       `INSERT INTO source_policy_reviews
        (source_id,automated_access_status,reuse_status,permitted_methods,allowed_hosts,
