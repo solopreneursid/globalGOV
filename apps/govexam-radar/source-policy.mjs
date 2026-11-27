@@ -50,10 +50,12 @@ export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) 
       `INSERT INTO source_policy_reviews
        (source_id,automated_access_status,reuse_status,permitted_methods,allowed_hosts,
         policy_url,reviewed_at,expires_at,reviewer_label,notes,updated_at)
-       VALUES($1,$2,$3,$4::jsonb,$5,$6,NULL,NULL,$7,$8,$9)
+       VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,$8,$9,$10)
        ON CONFLICT(source_id) DO NOTHING`,
       [source.id, automationSeed(policy), reuseSeed(policy), JSON.stringify(methods),
-        [policy.host], policy.policyUrl || source.url, "repository-policy-seed",
+        [policy.host], policy.policyUrl || source.url,
+        automationSeed(policy) === "approved" ? now : null,
+        "repository-policy-seed",
         "Seeded from the version-controlled first-party connector registry. This seed is not independent legal approval; review before expanding collection or reuse.",
         now]
     );
@@ -133,8 +135,9 @@ export async function recordSourcePolicyReview(pool, {
     }
     return { method: "GET", path: item.path, contentType: item.contentType.toLowerCase() };
   });
-  if (automatedAccessStatus === "approved" && methods.length === 0) {
-    throw new Error("approved_source_policy_requires_get_method");
+  if (automatedAccessStatus === "approved" &&
+      (methods.length === 0 || !policyUrl || !notes.trim() || expiresAt === null || expiresAt <= reviewedAt)) {
+    throw new Error("approved_source_policy_requires_evidence_expiry_and_get_method");
   }
   if (policyUrl !== null) {
     const url = new URL(policyUrl);
