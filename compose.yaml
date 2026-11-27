@@ -8,8 +8,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-globalgov}
       POSTGRES_USER: ${POSTGRES_USER:-globalgov}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_DB_USER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      BACKUP_DB_USER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
+      BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/self-hosted/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-globalgov} -d ${POSTGRES_DB:-globalgov}"]
       interval: 10s
@@ -27,7 +32,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: .env
     environment:
       HOST: 0.0.0.0
       PORT: 8080
@@ -35,9 +39,14 @@ services:
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-globalgov}
-      PGUSER: ${POSTGRES_USER:-globalgov}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
       PGSSLMODE: disable
+      INGEST_HMAC_KEY: ${INGEST_HMAC_KEY:-}
+      MODERATOR_TOKEN: ${MODERATOR_TOKEN:-}
+      SSB_AUTOMATED_ACCESS_APPROVED: ${SSB_AUTOMATED_ACCESS_APPROVED:-false}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-4194304}
       DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
     expose: ["8080"]
     volumes:
@@ -65,14 +74,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: .env
     environment:
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-globalgov}
-      PGUSER: ${POSTGRES_USER:-globalgov}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
       PGSSLMODE: disable
+      INGEST_HMAC_KEY: ${INGEST_HMAC_KEY:-}
+      SSB_AUTOMATED_ACCESS_APPROVED: ${SSB_AUTOMATED_ACCESS_APPROVED:-false}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
       DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
     volumes:
       - globalgov_documents:/var/lib/globalgov/documents
@@ -98,7 +109,7 @@ services:
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-globalgov}
-      PGUSER: ${POSTGRES_USER:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov_admin}
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       PGSSLMODE: disable
     networks: [data]
@@ -114,13 +125,12 @@ services:
         condition: service_healthy
       app:
         condition: service_healthy
-    env_file: .env
     environment:
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-globalgov}
-      PGUSER: ${POSTGRES_USER:-globalgov}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
       PGSSLMODE: disable
       APP_HEALTH_URL: http://app:8080/api/health
       DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
@@ -144,15 +154,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - .env
-      - .env.backup
+    env_file: .env.backup
     environment:
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-globalgov}
-      PGUSER: ${POSTGRES_USER:-globalgov}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGUSER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
+      PGPASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
       PGSSLMODE: disable
       BACKUP_DIR: /var/lib/globalgov/backups
     volumes:
@@ -169,10 +177,10 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    env_file: .env
     depends_on: [app]
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
     ports:
       - "80:80"
       - "443:443"
