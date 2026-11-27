@@ -29,7 +29,7 @@ test('announcement text maps only documented public fields and enforces exact co
 });
 test('historic endpoint uses no credentials and makes one bounded request',async()=>{
  let called=0;const response=page([record()],null);
- const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async(url,init)=>{called++;const u=new URL(url);assert.equal(u.origin,'https://data.usajobs.gov');assert.equal(u.pathname,'/api/historicjoa');assert.equal(u.searchParams.get('PositionSeries'),'2210');assert.equal(u.searchParams.get('StartPositionCloseDate'),'11-27-2025');assert.equal(u.searchParams.get('EndPositionCloseDate'),'11-27-2026');assert.equal(init.redirect,'error');assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers['Authorization-Key'],undefined);assert.match(init.headers['User-Agent'],/^globalGOV\//);return Response.json(response);}});
+ const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async(url,init)=>{called++;const u=new URL(url);assert.equal(u.origin,'https://data.usajobs.gov');assert.equal(u.pathname,'/api/historicjoa');assert.equal(u.searchParams.get('PositionSeries'),'2210');assert.equal(u.searchParams.get('StartPositionCloseDate'),'11-27-2025');assert.equal(u.searchParams.get('EndPositionCloseDate'),'11-27-2026');assert.equal(init.redirect,'manual');assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers['Authorization-Key'],undefined);assert.match(init.headers['User-Agent'],/^globalGOV\//);return Response.json(response);}});
  assert.equal(r.status,200);assert.equal((await r.json()).records.length,1);assert.equal(called,1);
 });
 test('history endpoint rejects unbounded queries without touching upstream',async()=>{
@@ -55,4 +55,19 @@ test('continuation token is decoded once and forwarded under documented lowercas
 test('upstream schema errors are exposed as bounded stable codes, not swallowed as network failures',async()=>{
  const response=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async()=>Response.json({paging:{metadata:{totalCount:1,pageSize:500}},data:{unexpected:true}})});
  assert.equal(response.status,502);assert.equal((await response.json()).error,'historic_schema_changed');
+});
+
+test('follows one same-host same-endpoint redirect in manual mode only',async()=>{
+ let calls=0;
+ const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async(url,init)=>{
+  calls++;assert.equal(init.redirect,'manual');
+  if(calls===1)return new Response(null,{status:302,headers:{location:'https://data.usajobs.gov/api/historicjoa?PositionSeries=2210'}});
+  assert.equal(new URL(url).origin,'https://data.usajobs.gov');return Response.json(page([record()],null));
+ }});
+ assert.equal(r.status,200);assert.equal(calls,2);
+});
+test('rejects cross-origin and endpoint-changing redirects without following them',async()=>{
+ let calls=0;
+ const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async()=>{calls++;return new Response(null,{status:302,headers:{location:'https://evil.test/api/historicjoa'}});}});
+ assert.equal(r.status,502);assert.equal((await r.json()).error,'upstream_redirect_rejected');assert.equal(calls,1);
 });
