@@ -32,8 +32,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install locked runtime dependencies
+        run: npm ci --no-audit --no-fund
       - name: Unit and API tests
-        run: node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs ssb-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs usajobs-history.test.mjs
+        run: npm test
       - name: Install browser test runtime
         run: |
           npm install --no-save playwright@1.56.1
@@ -203,6 +205,24 @@ jobs:
           docker exec -i globalgov-schema-test \
             psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
             < infra/self-hosted/postgres/001_core.test.sql
+      - name: Install locked PostgreSQL driver
+        working-directory: apps/govexam-radar
+        run: npm ci --no-audit --no-fund
+      - name: Run live PostgreSQL adapter integration tests
+        working-directory: apps/govexam-radar
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: globalgov
+          PGUSER: globalgov
+          PGPASSWORD: globalgov-ci-only
+        run: node --test postgres-d1.integration.test.mjs
+      - name: Validate Compose configuration
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+      - name: Build self-hosted runtime image
+        run: docker build --tag globalgov:self-hosted-ci .
       - name: Remove isolated PostgreSQL
         if: always()
         run: docker rm -f globalgov-schema-test || true
