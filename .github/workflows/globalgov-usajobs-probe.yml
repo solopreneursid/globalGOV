@@ -1,0 +1,26 @@
+name: globalGOV USAJOBS credential smoke probe
+on:
+  workflow_dispatch:
+    inputs:
+      terms_confirmed:
+        description: I have confirmed the applicable USAJOBS API terms permit this intended smoke test and downstream use.
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: inputs.terms_confirmed == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Make one bounded, read-only API request
+        env:
+          USAJOBS_REGISTERED_EMAIL: ${{ secrets.USAJOBS_REGISTERED_EMAIL }}
+          USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
+        run: node apps/govexam-radar/usajobs-probe.mjs
