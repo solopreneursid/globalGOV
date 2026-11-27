@@ -114,7 +114,9 @@ async function main() {
   try {
     const migration = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
       .bind("001_core").first();
-    if (!migration) throw new Error("database_schema_not_migrated");
+    const operations = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
+      .bind("002_first_party_operations").first();
+    if (!migration || !operations) throw new Error("database_schema_not_migrated");
 
     const env = {
       DB: db,
