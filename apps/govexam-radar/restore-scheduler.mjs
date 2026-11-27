@@ -12,7 +12,10 @@ export function restoreTestIsDue({ dbRestoreAt = null, documentRestoreAt = null,
   if (!Number.isSafeInteger(now) || now <= 0) return false;
   const dbAt = dbRestoreAt === null ? null : Number(dbRestoreAt);
   const documentAt = documentRestoreAt === null ? null : Number(documentRestoreAt);
-  return !dbAt || !documentAt || now - dbAt > RESTORE_INTERVAL_MS || now - documentAt > RESTORE_INTERVAL_MS;
+  const dbValid = Number.isSafeInteger(dbAt) && dbAt > 0 && dbAt <= now;
+  const documentValid = Number.isSafeInteger(documentAt) && documentAt > 0 && documentAt <= now;
+  return !dbValid || !documentValid ||
+    now - dbAt > RESTORE_INTERVAL_MS || now - documentAt > RESTORE_INTERVAL_MS;
 }
 
 export async function runRestoreTestTick({
