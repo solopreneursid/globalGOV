@@ -5,14 +5,14 @@ import {readFile,stat,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {DOCUMENT_SOURCES,officialDocumentUrl,extractRecruitmentEvidence} from './recruitment-evidence.mjs';
 const MAX=10*1024*1024;
-async function bounded(response,max){
+export async function bounded(response,max){
  if(Number(response.headers.get('content-length')||0)>max)throw Error('response_too_large');
  const reader=response.body?.getReader();if(!reader)throw Error('empty_response');
  const parts=[];let size=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>max){await reader.cancel();throw Error('response_too_large');}parts.push(Buffer.from(value));}return Buffer.concat(parts);}finally{reader.releaseLock();}
 }
-export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch){
- const url=officialDocumentUrl(sourceId,raw),host=DOCUMENT_SOURCES[sourceId].host;
+export async function checkDocumentRobots(host,fetcher=fetch){
+ if(host!=='apps.shar.gov.in')throw Error('unknown_document_host');
  const options={redirect:'manual',headers:{'User-Agent':'globalGOVSourceReview/1.0','Accept':'text/plain,application/pdf'}};
  const robots=await fetcher('https://'+host+'/robots.txt',{...options,signal:AbortSignal.timeout(12000)});
  if(![200,404].includes(robots.status))throw Error('robots_access_unconfirmed_'+robots.status);
@@ -20,6 +20,11 @@ export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch){
   const body=(await bounded(robots,8192)).toString('utf8');
   if(!/^text\/plain\b/i.test(robots.headers.get('content-type')||'')||/<\s*(?:html|doctype)\b/i.test(body)||/^\s*disallow\s*:\s*[^\s#]/im.test(body))throw Error('robots_review_required');
  }else await robots.body?.cancel();
+}
+export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch){
+ const url=officialDocumentUrl(sourceId,raw),host=DOCUMENT_SOURCES[sourceId].host;
+ await checkDocumentRobots(host,fetcher);
+ const options={redirect:'manual',headers:{'User-Agent':'globalGOVSourceReview/1.0','Accept':'application/pdf'}};
  const response=await fetcher(url,{...options,signal:AbortSignal.timeout(20000)});
  if(response.status!==200||!/^application\/pdf\b/i.test(response.headers.get('content-type')||''))throw Error('official_pdf_unavailable_'+response.status);
  return bounded(response,MAX);

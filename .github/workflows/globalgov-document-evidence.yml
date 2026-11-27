@@ -12,6 +12,8 @@ on:
       - 'apps/govexam-radar/encrypted-backup*.mjs'
       - '.github/workflows/globalgov-document-evidence.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '30 5,17 * * *'
 permissions:
   contents: read
 jobs:
@@ -24,7 +26,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify extraction, source boundaries, eligibility and encrypted restore
-        run: node --test apps/govexam-radar/recruitment-evidence.test.mjs apps/govexam-radar/encrypted-backup.test.mjs
+        run: node --test apps/govexam-radar/recruitment-evidence.test.mjs apps/govexam-radar/recruitment-events.test.mjs apps/govexam-radar/recruitment-ledger.test.mjs apps/govexam-radar/encrypted-backup.test.mjs
   source-probe:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
@@ -41,3 +43,14 @@ jobs:
           dir=$(mktemp -d)
           trap 'rm -rf "$dir"' EXIT
           node apps/govexam-radar/recruitment-document.mjs india-sdsc-shar 'https://apps.shar.gov.in/sdscshar/advt_03_2026/Notice%20dated%2013.11.2026.pdf' --fetch - "$dir/review.json"
+  event-probe:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Discover candidate exam updates without publishing
+        run: node apps/govexam-radar/recruitment-events.mjs
