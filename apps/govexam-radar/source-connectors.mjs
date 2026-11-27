@@ -125,7 +125,7 @@ export function buildSourceConnectorInventory(sources) {
 }
 
 export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/") {
-  if (typeof text !== "string" || Buffer.byteLength(text) > 8192) {
+  if (typeof text !== "string" || new TextEncoder().encode(text).byteLength > 8192) {
     throw new Error("robots_document_invalid");
   }
   const groups = [];
@@ -169,7 +169,7 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
 async function readBounded(response, maxBytes) {
   const advertised = Number(response.headers.get("content-length") || 0);
   if (Number.isFinite(advertised) && advertised > maxBytes) throw new Error("source_response_too_large");
-  if (!response.body) return Buffer.alloc(0);
+  if (!response.body) return new Uint8Array(0);
   const reader = response.body.getReader();
   const chunks = [];
   let size = 0;
@@ -182,9 +182,15 @@ async function readBounded(response, maxBytes) {
         await reader.cancel();
         throw new Error("source_response_too_large");
       }
-      chunks.push(Buffer.from(value));
+      chunks.push(value);
     }
-    return Buffer.concat(chunks);
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   } finally {
     reader.releaseLock();
   }
