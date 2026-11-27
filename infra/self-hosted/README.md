@@ -8,14 +8,14 @@ This directory is the owner-operated deployment target for globalGOV Option B.
 
 **Still requires owner-controlled activation:** complete D1 schema reconciliation and export/import, an owner-operated Linux host, real secrets and SSH host-key pinning, an empty PostgreSQL deployment, live source-policy verification, independent security/accessibility review, and production cutover approval. CI success is not proof that a host, remote backup, or restore has been exercised.
 
-## Before using the schema
+## Data migration — implemented, not yet run against owner data
 
-1. Export every relevant D1 database and any populated local SQLite evidence database.
-2. Keep immutable copies of the exports and record their SHA-256 hashes.
-3. Run the existing `node apps/govexam-radar/d1-export-backup.mjs encrypt PRIVATE.sql PRIVATE_DIR/backup.enc` offline after exporting the canonical D1 SQL. It validates the 12 required canonical tables and encrypts the export; it does not contact Cloudflare or import PostgreSQL data.
-4. Compare the actual D1 schema with `postgres/001_core.sql`; the target schema is derived from repository migrations and queries, not yet reconciled against a complete D1 export.
-5. Restore the exports into an isolated test environment before importing into the target PostgreSQL database.
-6. Never point this schema at production data or delete the source databases during the initial migration.
+1. Export every relevant D1 database and any populated local SQLite evidence database using owner-controlled credentials. Keep immutable source copies and record their SHA-256 hashes.
+2. Run `node apps/govexam-radar/d1-export-backup.mjs encrypt PRIVATE.sql PRIVATE_DIR/backup.enc` offline. It validates the 12 canonical application tables and encrypts the SQL export; it does not contact Cloudflare or mutate source databases.
+3. Compare the source schema with `postgres/001_core.sql` and `postgres/002_first_party_operations.sql`. The importer deliberately rejects column-order, column-name, type and foreign-key incompatibilities rather than guessing.
+4. Run `node postgres-import.mjs plan /secure/path/backup.enc` with `GLOBALGOV_BACKUP_KEY_HEX` and PostgreSQL credentials. Plan mode restores the encrypted export into a temporary read-only SQLite snapshot, checks integrity, counts rows and computes per-table SHA-256 checksums. It performs no PostgreSQL writes.
+5. Only after reviewing the plan, use a dedicated empty PostgreSQL target and explicitly set `GLOBALGOV_IMPORT_ALLOW_WRITE=true` and `GLOBALGOV_IMPORT_CONFIRM_DATABASE=$PGDATABASE` before `node postgres-import.mjs apply /secure/path/backup.enc`. Apply mode rechecks that all 12 target tables are empty, imports in foreign-key order, verifies every row count and checksum, and records an immutable migration-run record. It never deletes or updates source data.
+6. Keep source databases and exports unchanged until the owner approves cutover. The importer does not yet migrate unrelated SQLite evidence archives or browser-local bookmarks; those remain separate migration items.
 
 ## Local smoke test
 
@@ -44,9 +44,13 @@ For a local Caddy certificate, the browser may require trusting Caddy's local de
 - `app`: Node.js HTTP application, preserving the existing Fetch API handler.
 - `scheduler`: separate Node.js process, sharing application code and PostgreSQL; a unique schedule-slot ledger prevents duplicate runs.
 - `postgres`: persistent relational database, isolated on an internal-only network.
-- `migrate`: one-shot schema initialization service, enabled only through the `tools` profile.
+- `migrate`: one-shot schema initialization and least-privilege role grants, enabled only through the `tools` profile.
+- `policy-review`: one-shot founder-only source-policy review CLI; no public route can approve a source.
+- `monitor`: independent database, application, scheduler, source freshness, backup and disk watchdog. Open incidents are deduplicated and resolved automatically after recovery.
+- `backup`: daily encrypted PostgreSQL and document-volume archives, with owner-hosted SSH copy and remote SHA-256 verification.
+- `restore-scheduler`: monthly isolated database and document archive restore tests using a separate CREATEDB-only role.
 - `caddy`: public TLS reverse proxy; internal readiness routes are blocked from public requests.
-- `globalgov_documents`: persistent owner-controlled document volume. Document ingestion/storage workers are not yet connected.
+- `globalgov_documents`: private content-addressed PDF archive. Manual evidence intake and policy-gated automated collection feed an append-only human-review queue; no intake action publishes a notice.
 
 ## Migration safety
 
@@ -54,9 +58,25 @@ The existing isolated Cloudflare staging application remains the rollback refere
 
 See [the architecture and migration plan](../../docs/architecture/SELF_HOSTED.md) and [the PostgreSQL target schema](postgres/001_core.sql).
 
+## Source policy and independent collection
+
+- The canonical registry contains 60 official recruitment portals. Directory membership is not automated-access permission.
+- The self-hosted migration seeds one `source_policy_reviews` row per source using the version-controlled connector allowlist. Existing founder-reviewed rows are preserved.
+- Automated document intake requires an explicit, unexpired database policy review, an exact official HTTPS host, an allowlisted GET path/content type, a successful `robots.txt` check, bounded response size and manual review after extraction.
+- HTTP redirects, login pages, robots denial and unknown policy status stop collection. No login, CAPTCHA bypass, proxy rotation or third-party scraper is used.
+- SSB remains `clarification_required`. Its `robots.txt` login redirect is not bypassed. The public directory link remains available, and founder-supplied PDFs can be added to the private manual-review queue.
+- Manual SSB PDF intake (after downloading from the official site): `chmod 600 /secure/path/notice.pdf`, then run `node source-document-collector.mjs manual ssb-india-recruitment https://recruitment.ssb.gov.in/official-notice-path.pdf /secure/path/notice.pdf`. The source URL must use the registered SSB host. The operation stores the original by SHA-256 and queues it as pending review; it does not publish.
+- An automated PDF fetch is possible only after a founder records an approved, time-limited policy review. The collector still obeys robots rules and redirect restrictions. The public website copyright policy is not treated as automated-access approval.
+
 ## Encrypted backups and recovery
 
-The backup service runs daily at 02:15 UTC. It creates an AES-256-GCM encrypted PostgreSQL custom archive and a separately encrypted content-addressed PDF archive, verifies both locally, copies both to the owner-controlled SSH target, and compares remote SHA-256 hashes. Local retention defaults to 14 days. A full PostgreSQL plus document restore test runs monthly into a uniquely named temporary database; the database is dropped before the test is reported successful. The backup role has read access plus access to its backup ledger rows. Only the separate `RESTORE_TEST_DB_USER` role receives `CREATEDB` for isolated recovery tests.
+The backup service runs daily at 02:15 UTC. It creates an AES-256-GCM encrypted PostgreSQL custom archive and a separately encrypted content-addressed PDF archive, verifies both locally, copies both to the owner-controlled SSH target, and compares remote SHA-256 hashes. Local retention defaults to 14 days. A separate restore scheduler performs full PostgreSQL and document archive verification at least every 30 days. It restores into a uniquely named temporary database, verifies all required tables and schema migrations, checks document hashes, and drops the temporary database before marking the restore test successful.
+
+The PostgreSQL roles are separated:
+- `globalgov_admin`: database initialization and schema migrations only.
+- `globalgov_app`: application and scheduler table/sequence privileges; no role or database creation.
+- `globalgov_backup`: `pg_read_all_data` plus read/write access to `backup_runs`; no `CREATEDB`.
+- `RESTORE_TEST_DB_USER`: `CREATEDB` and maintenance-database connection only; used by the isolated restore scheduler, not the app or backup worker.
 
 Before enabling the backup service:
 
