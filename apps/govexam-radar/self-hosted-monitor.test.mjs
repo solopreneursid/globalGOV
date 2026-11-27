@@ -22,6 +22,7 @@ function healthyPool() {
       if (sql.startsWith("SELECT MAX(restore_verified_at)")) {
         return { rows: [{ db_restore_at: 3000, document_restore_at: 3000 }] };
       }
+      if (sql.includes("FROM source_connector_runs")) return { rows: [] };
       if (sql.startsWith("SELECT source_id,state")) {
         return { rows: [
           { source_id: "uk-dfe-teaching-vacancies", state: "ok", started_at: 4000 },
