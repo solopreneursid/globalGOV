@@ -11,23 +11,17 @@ export async function bounded(response,max){
  const parts=[];let size=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>max){await reader.cancel();throw Error('response_too_large');}parts.push(Buffer.from(value));}return Buffer.concat(parts);}finally{reader.releaseLock();}
 }
-export async function checkDocumentRobots(host,fetcher=fetch){
- if(host!=='apps.shar.gov.in')throw Error('unknown_document_host');
- const options={redirect:'manual',headers:{'User-Agent':'globalGOVSourceReview/1.0','Accept':'text/plain,application/pdf'}};
- const robots=await fetcher('https://'+host+'/robots.txt',{...options,signal:AbortSignal.timeout(12000)});
- if(![200,404].includes(robots.status))throw Error('robots_access_unconfirmed_'+robots.status);
- if(robots.status===200){
-  const body=(await bounded(robots,8192)).toString('utf8');
-  if(!/^text\/plain\b/i.test(robots.headers.get('content-type')||'')||/<\s*(?:html|doctype)\b/i.test(body)||/^\s*disallow\s*:\s*[^\s#]/im.test(body))throw Error('robots_review_required');
- }else await robots.body?.cancel();
-}
-export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch){
- const url=officialDocumentUrl(sourceId,raw),host=DOCUMENT_SOURCES[sourceId].host;
- await checkDocumentRobots(host,fetcher);
- const options={redirect:'manual',headers:{'User-Agent':'globalGOVSourceReview/1.0','Accept':'application/pdf'}};
- const response=await fetcher(url,{...options,signal:AbortSignal.timeout(20000)});
- if(response.status!==200||!/^application\/pdf\b/i.test(response.headers.get('content-type')||''))throw Error('official_pdf_unavailable_'+response.status);
- return bounded(response,MAX);
+export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch,policy=null){
+ if(!policy||policy.sourceId!==sourceId||policy.automatedCollectionEnabled!==true||
+    policy.automationStatus!=="approved"||!Array.isArray(policy.allowedContentTypes)||
+    !policy.allowedContentTypes.includes("application/pdf"))throw Error("reviewed_source_policy_required");
+ const url=officialDocumentUrl(sourceId,raw);
+ const source={id:sourceId,url};
+ const {fetchOfficialSource}=await import("./source-connectors.mjs");
+ const result=await fetchOfficialSource({source,url,fetcher,policyOverride:policy,
+  maxBytes:Math.min(MAX,policy.maxBytes||MAX),minIntervalMs:policy.minIntervalMs||5000});
+ if(result.contentType!=="application/pdf")throw Error("official_pdf_content_type_required");
+ return Buffer.from(result.bytes);
 }
 export function extractPdfText(bytes){
  if(!Buffer.isBuffer(bytes)||bytes.length>MAX||bytes.subarray(0,5).toString()!=='%PDF-')throw Error('invalid_pdf');
@@ -36,11 +30,11 @@ export function extractPdfText(bytes){
 }
 async function main(){
  const [sourceId,sourceUrl,mode,file,output,...extra]=process.argv.slice(2);
- if(extra.length||!output||!['--local','--fetch'].includes(mode)||mode==='--fetch'&&file!=='-')throw Error('usage: node recruitment-document.mjs SOURCE_ID OFFICIAL_PDF_URL --local FILE OUTPUT.json OR --fetch - OUTPUT.json');
+ if(extra.length||!output||mode!=='--local'||!file)throw Error('usage: node recruitment-document.mjs SOURCE_ID OFFICIAL_PDF_URL --local PRIVATE_LOCAL_PDF OUTPUT.json; network collection must use the reviewed source-document-collector workflow');
  officialDocumentUrl(sourceId,sourceUrl);
  let bytes;
- if(mode==='--local'){const s=await stat(file);if(!s.isFile()||s.size>MAX)throw Error('invalid_local_file');bytes=await readFile(file);}else bytes=await fetchOfficialDocument(sourceId,sourceUrl);
- const report=extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes:bytes,text:extractPdfText(bytes),provenance:mode==='--local'?'local_unverified':'official_https_fetch'});
+ if(mode==='--local'){const s=await stat(file);if(!s.isFile()||s.size>MAX)throw Error('invalid_local_file');bytes=await readFile(file);}
+ const report=extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes:bytes,text:extractPdfText(bytes),provenance:'local_unverified'});
  await writeFile(output,JSON.stringify(report,null,2)+'\n',{mode:0o600,flag:'wx'});
  console.log(JSON.stringify({reviewState:report.reviewState,sourceId,documentSha256:report.documentSha256,fields:Object.keys(report.fields),conflicts:report.conflicts,events:report.events.length,publicLaunchAuthorized:false}));
 }
