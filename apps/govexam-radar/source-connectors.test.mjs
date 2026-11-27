@@ -111,9 +111,9 @@ test("database-reviewed automation overrides still cannot bypass a robots redire
 
 test("robots parser fails closed on wildcard, end-anchor and malformed rule syntax",()=>{
   for(const rules of [
-    "User-agent: *\\nDisallow: /private/*",
-    "User-agent: *\\nDisallow: /private$",
-    "User-agent: *\\nDisallow: private",
-    "User-agent: \\nDisallow: /"
+    "User-agent: *\nDisallow: /private/*",
+    "User-agent: *\nDisallow: /private$",
+    "User-agent: *\nDisallow: private",
+    "User-agent: \nDisallow: /"
   ]) assert.throws(()=>parseRobotsRules(rules,"globalGOV"),/robots_(?:rule|user_agent)_syntax_unconfirmed/);
 });
