@@ -65,7 +65,7 @@ async function loadDetail(row,card,button){
 }
 function formParams(cursor){
  const form=$('history-form'),p=new URLSearchParams();
- const values={series:'series',agency:'agency',department:'department',announcementNumber:'announcementNumber',controlNumber:'controlNumber',closeFrom:'closeFrom',closeTo:'closeTo',openFrom:'openFrom',openTo:'openTo'};
+ const exact=$('controlNumber').value.trim()||$('announcementNumber').value.trim();const values=exact?{series:'series',agency:'agency',department:'department',announcementNumber:'announcementNumber',controlNumber:'controlNumber'}:{series:'series',agency:'agency',department:'department',announcementNumber:'announcementNumber',controlNumber:'controlNumber',closeFrom:'closeFrom',closeTo:'closeTo',openFrom:'openFrom',openTo:'openTo'};
  for(const [id,key] of Object.entries(values)){const v=$(id).value.trim();if(v)p.set(key,v);}
  if(cursor)p.set('cursor',cursor);return p;
 }
