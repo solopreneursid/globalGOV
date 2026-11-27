@@ -32,4 +32,15 @@ if(data.records.length){
  assert.ok(body.announcement===null||body.announcement.controlNumber===control);
  detail=body.announcement?'available':'no_text_record';
 }
-console.log(JSON.stringify({staging:'verified',historyRecords:data.records.length,totalCount:data.totalCount,rejected:data.rejected,nextPageAvailable:!!data.nextCursor,detail,archivePage:'ok',retrievedAt:data.retrievedAt}));
+let nextPageRecords=0;
+if(data.nextCursor){
+ const nextQuery=new URLSearchParams({series:'2210',closeFrom:iso(start),closeTo:iso(end),cursor:data.nextCursor});
+ const next=await fetch(base+'/api/usajobs/history?'+nextQuery.toString(),{redirect:'error',signal:AbortSignal.timeout(25000)});
+ assert.equal(next.status,200,'second historic JOA page must respond 200');
+ const nextData=await next.json();
+ assert.ok(Array.isArray(nextData.records));
+ const firstIds=new Set(data.records.map(x=>x.controlNumber));
+ assert.ok(nextData.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)&&!firstIds.has(x.controlNumber)));
+ nextPageRecords=nextData.records.length;
+}
+console.log(JSON.stringify({staging:'verified',historyRecords:data.records.length,nextPageRecords,totalCount:data.totalCount,rejected:data.rejected,nextPageAvailable:!!data.nextCursor,detail,archivePage:'ok',retrievedAt:data.retrievedAt}));
