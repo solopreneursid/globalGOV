@@ -117,3 +117,20 @@ test("robots parser fails closed on wildcard, end-anchor and malformed rule synt
     "User-agent: \nDisallow: /"
   ]) assert.throws(()=>parseRobotsRules(rules,"globalGOV"),/robots_(?:rule|user_agent)_syntax_unconfirmed/);
 });
+
+test("robots disallow rules are decoded as text and prevent target requests",async()=>{
+  resetSourceConnectorRateLimitsForTests();
+  const source={id:"isro-india-careers",url:"https://www.isro.gov.in/ViewAllOpportunities.html"};
+  let targetRequested=false;
+  await assert.rejects(fetchOfficialSource({
+    source,minIntervalMs:0,
+    fetcher:async input=>{
+      if(String(input).endsWith("/robots.txt")) {
+        return new Response("User-agent: *\\nDisallow: /",{headers:{"content-type":"text/plain"}});
+      }
+      targetRequested=true;
+      return new Response("<html>not allowed</html>",{headers:{"content-type":"text/html"}});
+    }
+  }),/robots_disallow/);
+  assert.equal(targetRequested,false);
+});
