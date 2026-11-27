@@ -54,8 +54,14 @@ export async function encryptReadableToFile({ readable, key, outputPath } = {}) 
   digest.update(prefix);
   const output = createWriteStream(outputPath, { flags: "wx", mode: 0o600 });
   output.write(prefix);
+  let encryptedBytes = prefix.length;
   const hashing = new Transform({
     transform(chunk, encoding, callback) {
+      encryptedBytes += chunk.length;
+      if (encryptedBytes > MAX_BACKUP_BYTES - TAG_BYTES) {
+        callback(new Error("backup_stream_size_limit_exceeded"));
+        return;
+      }
       digest.update(chunk);
       callback(null, chunk);
     }
