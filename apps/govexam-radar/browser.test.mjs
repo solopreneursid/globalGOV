@@ -274,6 +274,7 @@ test('USAJOBS archive paginates without skipped records and renders archived tex
    assert.ok(firstQuery.searchParams.has('closeFrom')&&firstQuery.searchParams.has('closeTo'));
    await page.locator('#records .record').first().getByRole('button',{name:'View archived announcement text'}).click();
    await page.locator('.detail').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.detail')?.textContent?.includes('Historical text'));
    assert.match(await page.locator('.detail').innerText(),/Historical text <img src=x onerror=window.__archiveXss=1>/);
    assert.equal(await page.locator('.detail img').count(),0);
    assert.equal(await page.evaluate(()=>window.__archiveXss),0);
