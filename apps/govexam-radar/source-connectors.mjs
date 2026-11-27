@@ -117,7 +117,7 @@ export function buildSourceConnectorInventory(sources) {
   });
 }
 
-export function parseRobotsRules(text, userAgent = "globalGOV") {
+export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/") {
   if (typeof text !== "string" || Buffer.byteLength(text) > 8192) {
     throw new Error("robots_document_invalid");
   }
@@ -148,7 +148,8 @@ export function parseRobotsRules(text, userAgent = "globalGOV") {
   const rules = matching
     .filter(g => g.agents.some(a => (a === "*" ? 0 : a.length) === specificity))
     .flatMap(g => g.rules);
-  const path = "/";
+  if (typeof requestPath !== "string" || !requestPath.startsWith("/")) throw new Error("robots_request_path_invalid");
+  const path = requestPath;
   let best = null;
   for (const rule of rules) {
     if (!path.startsWith(rule.path)) continue;
@@ -241,7 +242,7 @@ export async function fetchOfficialSource({
       throw new Error("robots_content_type_unconfirmed");
     }
     const robotsBody = (await readBounded(robots, 8192)).toString("utf8");
-    const decision = parseRobotsRules(robotsBody, userAgent);
+    const decision = parseRobotsRules(robotsBody, userAgent, target.pathname + target.search);
     if (!decision.allowed) throw new Error("robots_disallow");
   } else {
     await robots.body?.cancel().catch(() => {});
