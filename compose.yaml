@@ -184,8 +184,6 @@ services:
       PGDATABASE: ${POSTGRES_DB:-globalgov}
       PGUSER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
       PGPASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
-      RESTORE_TEST_DB_USER: ${RESTORE_TEST_DB_USER:?Set RESTORE_TEST_DB_USER in .env}
-      RESTORE_TEST_DB_PASSWORD: ${RESTORE_TEST_DB_PASSWORD:?Set RESTORE_TEST_DB_PASSWORD in .env}
       PGSSLMODE: disable
       BACKUP_DIR: /var/lib/globalgov/backups
       DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
