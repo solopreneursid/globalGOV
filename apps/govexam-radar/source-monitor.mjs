@@ -1,18 +1,18 @@
 // GovRadar source health monitor. Reports WEBSITE REACHABILITY only, never vacancies.
 const ORIGIN_STATUS = new Set(["reachable","restricted","unconfirmed"]);
 const writeResponse = (payload,status=200)=>new Response(JSON.stringify(payload),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Access-Control-Allow-Origin":"none"}});
-export async function checkPortalUrl(source){
+export async function checkPortalUrl(source,fetcher=fetch){
   // Source is selected from the server-owned registry, not from any client-supplied URL.
   const started=Date.now(),controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),5000);
   try{
-    const response=await fetch(source.url,{
+    const response=await fetcher(source.url,{
       method:"GET",redirect:"manual",signal:controller.signal,
       headers:{"Accept":"text/html,application/xhtml+xml"},
     });
     const code=response.status;
     if(response.body)await response.body.cancel().catch(()=>{});
-    const status=(code>=200&&code<400)?"reachable":([401,403,429].includes(code)?"restricted":"unconfirmed");
+    const status=(code>=200&&code<300)?"reachable":([401,403,429].includes(code)?"restricted":"unconfirmed");
     return {sourceId:source.id,status,httpStatus:code,checkedAt:new Date().toISOString(),latencyMs:Math.max(0,Date.now()-started)};
   }catch{
     return {sourceId:source.id,status:"unconfirmed",httpStatus:null,checkedAt:new Date().toISOString(),latencyMs:Math.max(0,Date.now()-started)};
