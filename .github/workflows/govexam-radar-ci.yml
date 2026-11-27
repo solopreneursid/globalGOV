@@ -6,6 +6,10 @@ on:
     paths:
       - 'apps/govexam-radar/**'
       - '.github/workflows/govexam-radar-ci.yml'
+      - 'infra/self-hosted/**'
+      - 'docs/architecture/**'
+      - 'README.md'
+      - 'MIGRATION.md'
   pull_request:
     paths:
       - 'apps/govexam-radar/**'
@@ -165,3 +169,36 @@ jobs:
         continue-on-error: true
         run: node apps/govexam-radar/probe-isro.mjs
 
+  postgres-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start isolated PostgreSQL 17
+        run: |
+          docker run -d --name globalgov-schema-test \
+            -e POSTGRES_USER=globalgov \
+            -e POSTGRES_PASSWORD=globalgov-ci-only \
+            -e POSTGRES_DB=globalgov \
+            -p 5432:5432 postgres:17-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec globalgov-schema-test pg_isready -U globalgov -d globalgov; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs globalgov-schema-test
+          exit 1
+      - name: Apply PostgreSQL target schema
+        run: |
+          docker exec -i globalgov-schema-test \
+            psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
+            < infra/self-hosted/postgres/001_core.sql
+      - name: Verify schema objects and revision trigger
+        run: |
+          docker exec -i globalgov-schema-test \
+            psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
+            < infra/self-hosted/postgres/001_core.test.sql
+      - name: Remove isolated PostgreSQL
+        if: always()
+        run: docker rm -f globalgov-schema-test || true
