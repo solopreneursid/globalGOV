@@ -61,6 +61,7 @@ test("official source fetch refuses redirects, robots restrictions and non-allow
       : new Response("<html>ok</html>", { headers: { "content-type": "text/html" } })
   });
   assert.equal(response.status, 200);
+  assert.ok(response.bytes instanceof Uint8Array);
   await assert.rejects(
     fetchOfficialSource({
       source,
