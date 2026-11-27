@@ -167,7 +167,7 @@ services:
     volumes:
       - globalgov_backups:/var/lib/globalgov/backups
       - globalgov_documents:/var/lib/globalgov/documents:ro
-      - ./secrets/ssh:/var/lib/postgresql/.ssh:ro
+      - ./secrets/ssh:/home/globalgov/.ssh:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
