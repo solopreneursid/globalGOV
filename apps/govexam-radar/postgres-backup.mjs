@@ -10,12 +10,13 @@ import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { createDocumentArchive, verifyDocumentArchive } from "./document-backup.mjs";
 
 const MAGIC = Buffer.from("GLOBALGOV-PG-BACKUP-1\n");
 const TAG_BYTES = 16;
 const KEY_BYTES = 32;
 const MAX_BACKUP_BYTES = 8 * 1024 * 1024 * 1024;
-const FILE_NAME = /^globalgov-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\.dump\.enc$/;
+const FILE_NAME = /^globalgov-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}(?:\.dump|\.documents\.tar)\.enc$/;
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 
@@ -275,7 +276,7 @@ async function copyOffHost(path, rawTarget, env) {
   }
 }
 
-async function pruneLocalBackups(directory, retentionDays, keepPath) {
+async function pruneLocalBackups(directory, retentionDays, keepPaths = []) {
   if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) {
     throw new Error("backup_retention_days_invalid");
   }
@@ -285,7 +286,7 @@ async function pruneLocalBackups(directory, retentionDays, keepPath) {
   for (const entry of entries) {
     if (!entry.isFile() || !FILE_NAME.test(entry.name)) continue;
     const path = join(directory, entry.name);
-    if (path === keepPath) continue;
+    if (keepPaths.includes(path)) continue;
     const info = await lstat(path);
     if (!info.isFile() || info.isSymbolicLink()) continue;
     if (info.mtimeMs < cutoff) {
@@ -310,6 +311,8 @@ export async function createPostgresBackup({
   const name = "globalgov-" + stamp + "-" + randomBytes(4).toString("hex") + ".dump.enc";
   const finalPath = join(resolve(backupDir), name);
   const tempPath = finalPath + ".tmp";
+  const documentFinalPath = finalPath.replace(/\.dump\.enc$/, ".documents.tar.enc");
+  const documentTempPath = documentFinalPath + ".tmp";
   const claim = await pool.query(
     "INSERT INTO backup_runs(id,started_at,state,local_path,remote_target) VALUES($1,$2,'running',$3,$4) " +
     "ON CONFLICT(id) DO UPDATE SET started_at=EXCLUDED.started_at,state='running',finished_at=NULL," +
@@ -331,24 +334,70 @@ export async function createPostgresBackup({
     await rename(tempPath, finalPath);
     await chmod(finalPath, 0o600);
     const verification = await verifyPostgresBackup({ backupPath: finalPath, key });
+    if (!verification.verified) throw new Error("postgres_archive_verification_failed");
+
+    const documentArchive = await createDocumentArchive({
+      root: env.DOCUMENT_STORE_DIR || "/var/lib/globalgov/documents",
+      key, outputPath: documentTempPath
+    });
+    await rename(documentTempPath, documentFinalPath);
+    await chmod(documentFinalPath, 0o600);
+    const documentVerification = await verifyDocumentArchive({ archivePath: documentFinalPath, key });
+    if (!documentVerification.verified || documentVerification.documentCount !== documentArchive.documentCount ||
+        documentVerification.documentBytes !== documentArchive.documentBytes) {
+      throw new Error("document_archive_verification_failed");
+    }
     archiveVerified = true;
+
     let remoteCopy = null;
-    if (remoteTarget) remoteCopy = await copyOffHost(finalPath, remoteTarget, env);
-    if (remoteCopy && remoteCopy.sha256 !== archive.sha256) throw new Error('remote_backup_checksum_mismatch');
-    const pruned = await pruneLocalBackups(resolve(backupDir), retentionDays, finalPath);
+    let remoteDocumentCopy = null;
+    if (remoteTarget) {
+      remoteCopy = await copyOffHost(finalPath, remoteTarget, env);
+      remoteDocumentCopy = await copyOffHost(documentFinalPath, remoteTarget, env);
+    }
+    if (remoteCopy && remoteCopy.sha256 !== archive.sha256) throw new Error("remote_backup_checksum_mismatch");
+    if (remoteDocumentCopy && remoteDocumentCopy.sha256 !== documentArchive.sha256) {
+      throw new Error("remote_document_backup_checksum_mismatch");
+    }
+
+    const pruned = await pruneLocalBackups(resolve(backupDir), retentionDays, [finalPath, documentFinalPath]);
     const finishedAt = now();
+    const details = {
+      pgDumpVersion: archive.pgDumpVersion,
+      archiveVerified: verification.verified,
+      documentArchiveVerified: documentVerification.verified,
+      documentCount: documentArchive.documentCount,
+      documentBytes: documentArchive.documentBytes,
+      remoteCopyCompleted: Boolean(remoteCopy && remoteDocumentCopy),
+      remoteHashVerified: Boolean(remoteCopy && remoteDocumentCopy),
+      localBackupsPruned: pruned
+    };
     await pool.query(
       `UPDATE backup_runs SET finished_at=$1,state='ok',local_sha256=$2,remote_target=$3,remote_sha256=$4,
-       byte_length=$5,archive_verified_at=$6,restore_verified_at=NULL,error_code=NULL,details=$7::jsonb WHERE id=$8`,
-      [finishedAt, archive.sha256, remoteCopy?.target || null, remoteCopy?.sha256 || null, archive.bytes, finishedAt,
-        JSON.stringify({ pgDumpVersion: archive.pgDumpVersion, archiveVerified: verification.verified,
-          remoteCopyCompleted: Boolean(remoteCopy), remoteHashVerified: Boolean(remoteCopy), localBackupsPruned: pruned }), runId]
+       byte_length=$5,archive_verified_at=$6,restore_verified_at=NULL,
+       document_archive_path=$7,document_archive_sha256=$8,remote_document_sha256=$9,
+       document_archive_bytes=$10,document_count=$11,document_archive_verified_at=$12,
+       document_restore_verified_at=NULL,error_code=NULL,details=$13::jsonb WHERE id=$14`,
+      [finishedAt, archive.sha256, remoteCopy?.target || null, remoteCopy?.sha256 || null,
+        archive.bytes, finishedAt, documentFinalPath, documentArchive.sha256,
+        remoteDocumentCopy?.sha256 || null, documentArchive.bytes, documentArchive.documentCount,
+        finishedAt, JSON.stringify(details), runId]
     );
-    return { state: "ok", runId, file: name, bytes: archive.bytes, sha256: archive.sha256,
-      archiveVerified: verification.verified, remoteCopyCompleted: Boolean(remoteCopy), remoteHashVerified: Boolean(remoteCopy), localBackupsPruned: pruned };
+    return {
+      state: "ok", runId, file: name, documentFile: basename(documentFinalPath),
+      bytes: archive.bytes, sha256: archive.sha256,
+      documentBytes: documentArchive.bytes, documentCount: documentArchive.documentCount,
+      archiveVerified: verification.verified, documentArchiveVerified: documentVerification.verified,
+      remoteCopyCompleted: Boolean(remoteCopy && remoteDocumentCopy),
+      remoteHashVerified: Boolean(remoteCopy && remoteDocumentCopy), localBackupsPruned: pruned
+    };
   } catch (error) {
     await unlink(tempPath).catch(() => {});
-    if (!archiveVerified) await unlink(finalPath).catch(() => {});
+    await unlink(documentTempPath).catch(() => {});
+    if (!archiveVerified) {
+      await unlink(finalPath).catch(() => {});
+      await unlink(documentFinalPath).catch(() => {});
+    }
     await pool.query(
       "UPDATE backup_runs SET finished_at=$1,state='error',error_code=$2,details=$3::jsonb WHERE id=$4",
       [now(), String(error?.message || "backup_failed").slice(0, 100),
