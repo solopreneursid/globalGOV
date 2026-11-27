@@ -95,12 +95,13 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
   if (!adminUser || !appUser || !backupUser) return { status: "skipped", reason: "runtime_roles_not_configured" };
   if (!env.PGDATABASE) throw new Error("postgres_runtime_database_name_required");
   const valid = /^[A-Za-z_][A-Za-z0-9_]*$/;
-  if (![adminUser, appUser, backupUser].every(name => valid.test(name)) ||
+  const database = env.PGDATABASE || "";
+  if (![adminUser, appUser, backupUser, database].every(name => valid.test(name)) ||
       new Set([adminUser, appUser, backupUser]).size !== 3) {
     throw new Error("postgres_runtime_role_name_invalid");
   }
   const quote = name => '"' + name + '"';
-  await pool.query("GRANT CONNECT ON DATABASE " + quote(env.PGDATABASE || "") +
+  await pool.query("GRANT CONNECT ON DATABASE " + quote(database) +
     " TO " + quote(appUser) + "," + quote(backupUser));
   await pool.query("GRANT USAGE ON SCHEMA public TO " + quote(appUser) + "," + quote(backupUser));
   await pool.query("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO " + quote(appUser));
