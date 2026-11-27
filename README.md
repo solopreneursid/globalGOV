@@ -6,6 +6,12 @@ Canonical repository: [solopreneursid/globalGOV](https://github.com/solopreneurs
 
 The application lives in `apps/govexam-radar/` to preserve existing module, test and workflow paths. See [application documentation](apps/govexam-radar/README.md) and [migration record](MIGRATION.md).
 
+## Infrastructure direction
+
+The approved long-term target is **Option B: owner-operated, self-hosted infrastructure**. The current isolated Cloudflare Worker/D1 staging deployment remains active only as a migration reference and rollback target. The self-hosted replacement is not yet deployed; no public DNS cutover or hosted-resource deletion is authorized.
+
+See [the self-hosted architecture and migration plan](docs/architecture/SELF_HOSTED.md), [self-hosted deployment foundation](infra/self-hosted/README.md), and [PostgreSQL target schema](infra/self-hosted/postgres/001_core.sql).
+
 ## Local verification
 
 Use Node.js 22. Run `cd apps/govexam-radar && npm test`. For browser tests install Playwright 1.56.1 and Chromium, then run `node --test browser.test.mjs uk-release-browser.test.mjs`.
