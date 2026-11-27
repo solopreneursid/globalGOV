@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { spawn, execFileSync } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
 import { appendFile, mkdir, lstat, readdir, unlink, rename, open, chmod } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, basename } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { once } from "node:events";
@@ -81,7 +81,7 @@ function pgDumpConfiguration(env) {
 export function safeRemoteTarget(target) {
   if (typeof target !== "string" ||
       !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:\/[A-Za-z0-9._/-]+$/.test(target) ||
-      target.includes("..") || target.includes("//")) {
+      target.includes("..") || target.includes("//") || !target.endsWith("/")) {
     throw new Error("backup_remote_target_invalid");
   }
   return target;
@@ -196,6 +196,10 @@ export async function verifyPostgresBackup({ backupPath, key, pgRestoreCommand =
 
 async function copyOffHost(path, rawTarget, env) {
   const target = safeRemoteTarget(rawTarget);
+  const match = /^([A-Za-z0-9._-]+@[A-Za-z0-9.-]+):(\\/[A-Za-z0-9._/-]+\\/)$/.exec(target);
+  if (!match) throw new Error("backup_remote_target_invalid");
+  const userHost = match[1];
+  const remoteFile = match[2] + basename(path);
   const rsyncEnv = {
     ...env,
     RSYNC_RSH: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10"
@@ -205,10 +209,16 @@ async function copyOffHost(path, rawTarget, env) {
       env: rsyncEnv, encoding: "utf8", timeout: 120000, maxBuffer: 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"]
     });
+    const remoteHash = runCommand("ssh", [
+      "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10",
+      userHost, "sha256sum -- " + remoteFile
+    ], env);
+    const matchHash = /^([a-f0-9]{64})\\s/.exec(remoteHash);
+    if (!matchHash) throw new Error("remote_backup_hash_invalid");
+    return { target, sha256: matchHash[1] };
   } catch {
     throw new Error("owner_controlled_remote_backup_failed");
   }
-  return target;
 }
 
 async function pruneLocalBackups(directory, retentionDays, keepPath) {
@@ -268,19 +278,19 @@ export async function createPostgresBackup({
     await chmod(finalPath, 0o600);
     const verification = await verifyPostgresBackup({ backupPath: finalPath, key });
     archiveVerified = true;
-    let copiedTo = null;
-    if (remoteTarget) copiedTo = await copyOffHost(finalPath, remoteTarget, env);
+    let remoteCopy = null;
+    if (remoteTarget) remoteCopy = await copyOffHost(finalPath, remoteTarget, env);
     const pruned = await pruneLocalBackups(resolve(backupDir), retentionDays, finalPath);
     const finishedAt = now();
     await pool.query(
-      `UPDATE backup_runs SET finished_at=$1,state='ok',local_sha256=$2,remote_target=$3,
-       byte_length=$4,restore_verified_at=$5,error_code=NULL,details=$6::jsonb WHERE id=$7`,
-      [finishedAt, archive.sha256, copiedTo, archive.bytes, finishedAt,
+      `UPDATE backup_runs SET finished_at=$1,state='ok',local_sha256=$2,remote_target=$3,remote_sha256=$4,
+       byte_length=$5,restore_verified_at=$6,error_code=NULL,details=$7::jsonb WHERE id=$8`,
+      [finishedAt, archive.sha256, remoteCopy?.target || null, remoteCopy?.sha256 || null, archive.bytes, finishedAt,
         JSON.stringify({ pgDumpVersion: archive.pgDumpVersion, archiveVerified: verification.verified,
-          archiveEntries: verification.archiveEntries, remoteCopyCompleted: Boolean(copiedTo), localBackupsPruned: pruned }), runId]
+          remoteCopyCompleted: Boolean(remoteCopy), remoteHashVerified: Boolean(remoteCopy), localBackupsPruned: pruned }), runId]
     );
     return { state: "ok", runId, file: name, bytes: archive.bytes, sha256: archive.sha256,
-      archiveVerified: verification.verified, remoteCopyCompleted: Boolean(copiedTo), localBackupsPruned: pruned };
+      archiveVerified: verification.verified, remoteCopyCompleted: Boolean(remoteCopy), remoteHashVerified: Boolean(remoteCopy), localBackupsPruned: pruned };
   } catch (error) {
     await unlink(tempPath).catch(() => {});
     if (!archiveVerified) await unlink(finalPath).catch(() => {});
