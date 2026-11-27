@@ -93,6 +93,7 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
   const appUser = env.APP_DB_USER || "";
   const backupUser = env.BACKUP_DB_USER || "";
   if (!adminUser || !appUser || !backupUser) return { status: "skipped", reason: "runtime_roles_not_configured" };
+  if (!env.PGDATABASE) throw new Error("postgres_runtime_database_name_required");
   const valid = /^[A-Za-z_][A-Za-z0-9_]*$/;
   if (![adminUser, appUser, backupUser].every(name => valid.test(name)) ||
       new Set([adminUser, appUser, backupUser]).size !== 3) {
