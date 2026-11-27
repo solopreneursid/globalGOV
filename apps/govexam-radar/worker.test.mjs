@@ -18,7 +18,7 @@ test("assets, manifest, PWA and service worker are served",async()=>{for(const p
 test("self-hosted full CSS is served",async()=>{const r=await request("/full.css");assert.equal(r.status,200);assert.match(await r.text(),/\.bg-indigo-600/);});
 test("browser enhancements are independently served",async()=>{const r=await request("/enhance.js");assert.equal(r.status,200);const js=await r.text();assert.match(js,/runFeedSync/);assert.match(js,/handleCommunityLogin/);});
 test("served browser scripts are valid JavaScript after template expansion",async()=>{
- for(const path of ["/lite.js","/official.js","/portable-bookmarks.js"]){
+ for(const path of ["/lite.js","/official.js","/portable-bookmarks.js","/usajobs-history.js"]){
   const response=await request(path);assert.equal(response.status,200,path);
   const script=await response.text();assert.doesNotThrow(()=>new Script(script,{filename:path}),path);
  }
@@ -111,4 +111,12 @@ test("UK release candidate is self-hosted, noindexed and remains staging-only",a
  assert.equal(notices.status,503,"no D1 means no invented commercial preview notices");
  const spec=await (await worker.fetch(new Request("https://app.example/openapi.json"))).json();
  assert.ok(spec.paths["/api/release-preview/notices"]);
+});
+
+test("USAJOBS historic archive is separate, noindexed and uses first-party assets",async()=>{
+ const page=await request("/usajobs-history");assert.equal(page.status,200);const html=await page.text();
+ assert.match(html,/Past USAJOBS announcements/);assert.match(html,/historical data only/i);assert.match(html,/\/usajobs-history\.js/);assert.match(page.headers.get("X-Robots-Tag"),/noindex/);assert.match(page.headers.get("Content-Security-Policy"),/script-src 'self'/);
+ for(const [path,pattern] of [["/usajobs-history.css",/\.record/],["/usajobs-history.js",/announcement-text/]]){const r=await request(path);assert.equal(r.status,200);assert.match(await r.text(),pattern);}
+ const lite=await request("/lite");assert.match(await lite.text(),/Past USAJOBS announcements/);
+ const spec=await (await request("/openapi.json")).json();assert.ok(spec.paths["/api/usajobs/history"]);assert.ok(spec.paths["/api/usajobs/announcement-text"]);
 });
