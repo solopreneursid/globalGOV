@@ -1,6 +1,7 @@
 // Conservative document extraction for the private review queue. No publication,
 // candidate-data persistence, inferred deadlines, or access-control bypass.
 import {createHash} from 'node:crypto';
+import {extractPostTableCandidates} from './recruitment-post-tables.mjs';
 export const DOCUMENT_SOURCES=Object.freeze({
  'india-sdsc-shar':Object.freeze({authority:'Satish Dhawan Space Centre SHAR / Department of Space',host:'apps.shar.gov.in',policy:'https://apps.shar.gov.in/Recruitment/copyright.jsp',paths:[/^\/sdscshar\/(?:advt_[0-9_]+|apprentice|notice)\/[^/]+\.pdf$/i,/^\/Recruitment[0-9_]*\/css\/images\/[^/]+\.pdf$/i]})
 });
@@ -88,6 +89,9 @@ export function extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes,tex
  }
  const opening=fields.opening?.value,closing=fields.closing?.value;
  if(opening&&closing&&opening.date>closing.date)conflicts.push('application_date_order');
+ const postTables=extractPostTableCandidates(text);
+ // Do not attach document-level qualification, age or fee to every post.
+ // Rows are scoped by their own explicit code, and remain review candidates.
  const stageEvents=fields.advertisement&&!conflicts.includes('advertisement')?events.map(e=>({...e,advertisement:fields.advertisement.value,state:'candidate_only'})):[];
- return {schemaVersion:1,sourceId,authority:DOCUMENT_SOURCES[sourceId].authority,sourceUrl:url,policyUrl:DOCUMENT_SOURCES[sourceId].policy,documentSha256:sha(documentBytes),textSha256:sha(Buffer.from(text)),observedAt,provenance,fields,candidates,conflicts:[...new Set(conflicts)],events:stageEvents,reviewState:'requires_review',publicLaunchAuthorized:false,limitations:['Label-based extraction only; tables, prose, translations and multiple posts may require review.','No inferred dates, eligibility or stage transitions.','No document or candidate data is published.']};
+ return {schemaVersion:1,sourceId,authority:DOCUMENT_SOURCES[sourceId].authority,sourceUrl:url,policyUrl:DOCUMENT_SOURCES[sourceId].policy,documentSha256:sha(documentBytes),textSha256:sha(Buffer.from(text)),observedAt,provenance,fields,candidates,postTables,conflicts:[...new Set(conflicts)],events:stageEvents,reviewState:'requires_review',publicLaunchAuthorized:false,limitations:['Label and limited fixed-column extraction only; complex tables, prose, translations and per-post requirements may require review.','No inferred dates, eligibility or stage transitions.','No document or candidate data is published.']};
 }
