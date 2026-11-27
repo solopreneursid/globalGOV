@@ -120,6 +120,8 @@ async function main() {
 
     const env = {
       DB: db,
+      SOURCE_POLICY_POOL: pool,
+      REQUIRE_SOURCE_POLICY_REGISTRY: "true",
       USAJOBS_FETCH: fetch,
       ...(process.env.INGEST_HMAC_KEY ? { INGEST_HMAC_KEY: process.env.INGEST_HMAC_KEY } : {}),
       ...(process.env.SSB_AUTOMATED_ACCESS_APPROVED ? { SSB_AUTOMATED_ACCESS_APPROVED: process.env.SSB_AUTOMATED_ACCESS_APPROVED } : {})
