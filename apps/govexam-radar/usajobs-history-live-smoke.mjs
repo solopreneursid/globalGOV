@@ -7,9 +7,10 @@ const page=await fetch(base+'/api/usajobs/history?'+q.toString(),{redirect:'erro
 if(!page.ok){
  const body=await page.json().catch(()=>({}));
  const upstream=new URL('https://data.usajobs.gov/api/historicjoa');
+ const usaDate=d=>String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0')+'-'+d.getUTCFullYear();
  upstream.searchParams.set('PositionSeries','2210');
- upstream.searchParams.set('StartPositionCloseDate',start.toLocaleDateString('en-US',{timeZone:'UTC'}));
- upstream.searchParams.set('EndPositionCloseDate',end.toLocaleDateString('en-US',{timeZone:'UTC'}));
+ upstream.searchParams.set('StartPositionCloseDate',usaDate(start));
+ upstream.searchParams.set('EndPositionCloseDate',usaDate(end));
  const direct=await fetch(upstream,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Accept:'application/json'}});
  const location=direct.headers.get('location');
  const redirect=location?new URL(location,upstream).origin+new URL(location,upstream).pathname:'none';
