@@ -103,6 +103,39 @@ services:
       PGSSLMODE: disable
     networks: [data]
 
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "self-hosted-monitor.mjs"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable
+      APP_HEALTH_URL: http://app:8080/api/health
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
+      BACKUP_DIR: /var/lib/globalgov/backups
+    volumes:
+      - globalgov_documents:/var/lib/globalgov/documents:ro
+      - globalgov_backups:/var/lib/globalgov/backups:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [backend, data]
+
   backup:
     build:
       context: .
