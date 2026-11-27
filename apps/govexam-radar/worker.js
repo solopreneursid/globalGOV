@@ -12,6 +12,7 @@ import { ingestDfE, serveOfficialNotices, servePublicIngestionStatus } from "./o
 import { OFFICIAL_UI_JS } from "./official-ui.mjs";
 import {RELEASE_PREVIEW_HTML,RELEASE_PREVIEW_CSS,RELEASE_PREVIEW_JS} from "./release-preview-ui.mjs";
 import { combinedSources, filterSources, REGIONAL_SOURCES } from "./regional-sources.mjs";
+import { buildSourceConnectorInventory } from "./source-connectors.mjs";
 import { REGIONAL_UI_JS } from "./regional-ui.mjs";
 import { ingestManitoba } from "./manitoba-feed.mjs";
 import {serveCollectorPlan,handleCollectorIngest} from "./collector-bridge.mjs";
@@ -137,6 +138,13 @@ export default {
 
     if (path === "/api/jurisdictions") return JSONResponse(filterSources(SOURCES,url.searchParams),200,"public, max-age=600");
     if (path === "/api/source-status") return getPortalStatus(env?.DB, SOURCES);
+    if (path === "/api/source-connectors") {
+      const sources = buildSourceConnectorInventory(SOURCES);
+      return JSONResponse({ generatedAt: new Date().toISOString(), total: sources.length,
+        automatedConnectors: sources.filter(x => x.automatedCollectionEnabled).length,
+        directoryOnly: sources.filter(x => x.connector === "directory_only").length,
+        sources, notice: "A directory entry is not permission to automate collection or republish content. Connector status reflects the current first-party policy configuration." }, 200, "no-store");
+    }
     if (path === "/api/reviewed-recruitment") return JSONResponse(await readReviewedCatalog(),200,"no-store");
     if(path==="/api/usajobs/history")return handleUsajobsHistory(request,{fetcher:env?.USAJOBS_FETCH||fetch});
     if(path==="/api/usajobs/announcement-text")return handleUsajobsAnnouncementText(request,{fetcher:env?.USAJOBS_FETCH||fetch});
