@@ -43,6 +43,29 @@ function runCommand(command, args, env = process.env, maxBuffer = 1024 * 1024) {
   }
 }
 
+export function sealBackupBytes(bytes, key) {
+  assertKey(key);
+  if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > MAX_BACKUP_BYTES) throw new Error("backup_payload_invalid");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(MAGIC);
+  const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
+  return Buffer.concat([MAGIC, iv, encrypted, cipher.getAuthTag()]);
+}
+
+export function openBackupBytes(envelope, key) {
+  assertKey(key);
+  if (!Buffer.isBuffer(envelope) || envelope.length <= MAGIC.length + 12 + TAG_BYTES ||
+      envelope.length > MAX_BACKUP_BYTES || !envelope.subarray(0, MAGIC.length).equals(MAGIC)) {
+    throw new Error("encrypted_backup_envelope_invalid");
+  }
+  const start = MAGIC.length;
+  const decipher = createDecipheriv("aes-256-gcm", key, envelope.subarray(start, start + 12));
+  decipher.setAAD(MAGIC);
+  decipher.setAuthTag(envelope.subarray(envelope.length - TAG_BYTES));
+  return Buffer.concat([decipher.update(envelope.subarray(start + 12, envelope.length - TAG_BYTES)), decipher.final()]);
+}
+
 function pgDumpConfiguration(env) {
   const database = env.PGDATABASE || "";
   const user = env.PGUSER || "";
@@ -55,7 +78,7 @@ function pgDumpConfiguration(env) {
   return { database, user, password, host, port };
 }
 
-function safeRemoteTarget(target) {
+export function safeRemoteTarget(target) {
   if (typeof target !== "string" ||
       !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:\/[A-Za-z0-9._/-]+$/.test(target) ||
       target.includes("..") || target.includes("//")) {
@@ -224,17 +247,24 @@ export async function createPostgresBackup({
   const finalPath = join(resolve(backupDir), name);
   const tempPath = finalPath + ".tmp";
   const claim = await pool.query(
-    "INSERT INTO backup_runs(id,started_at,state,local_path,remote_target) VALUES($1,$2,'running',$3,$4) ON CONFLICT(id) DO NOTHING",
+    "INSERT INTO backup_runs(id,started_at,state,local_path,remote_target) VALUES($1,$2,'running',$3,$4) " +
+    "ON CONFLICT(id) DO UPDATE SET started_at=EXCLUDED.started_at,state='running',finished_at=NULL," +
+    "local_path=EXCLUDED.local_path,remote_target=EXCLUDED.remote_target,local_sha256=NULL,remote_sha256=NULL," +
+    "byte_length=NULL,restore_verified_at=NULL,error_code=NULL,details='{}'::jsonb " +
+    "WHERE (backup_runs.state='error' AND backup_runs.started_at < EXCLUDED.started_at - 900000) " +
+    "OR (backup_runs.state='running' AND backup_runs.started_at < EXCLUDED.started_at - 1800000) RETURNING id",
     [runId, startedAt, finalPath, remoteTarget || null]
   );
   if (claim.rowCount !== 1) return { state: "already_claimed", runId };
 
+  let archiveVerified = false;
   try {
     if (requireRemote && !remoteTarget) throw new Error("off_host_backup_destination_required");
     const archive = await spawnDump(tempPath, key, env);
     await rename(tempPath, finalPath);
     await chmod(finalPath, 0o600);
     const verification = await verifyPostgresBackup({ backupPath: finalPath, key });
+    archiveVerified = true;
     let copiedTo = null;
     if (remoteTarget) copiedTo = await copyOffHost(finalPath, remoteTarget, env);
     const pruned = await pruneLocalBackups(resolve(backupDir), retentionDays, finalPath);
@@ -250,6 +280,7 @@ export async function createPostgresBackup({
       archiveVerified: verification.verified, remoteCopyCompleted: Boolean(copiedTo), localBackupsPruned: pruned };
   } catch (error) {
     await unlink(tempPath).catch(() => {});
+    if (!archiveVerified) await unlink(finalPath).catch(() => {});
     await pool.query(
       "UPDATE backup_runs SET finished_at=$1,state='error',error_code=$2,details=$3::jsonb WHERE id=$4",
       [now(), String(error?.message || "backup_failed").slice(0, 100),
