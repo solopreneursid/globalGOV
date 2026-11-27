@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS backup_runs (
   remote_target TEXT,
   remote_sha256 CHAR(64),
   byte_length BIGINT,
+  archive_verified_at BIGINT,
   restore_verified_at BIGINT,
   error_code TEXT,
   details JSONB NOT NULL DEFAULT '{}'::jsonb
