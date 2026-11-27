@@ -79,9 +79,19 @@ function pgDumpConfiguration(env) {
 }
 
 export function safeRemoteTarget(target) {
-  if (typeof target !== "string" ||
-      !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:\/[A-Za-z0-9._/-]+$/.test(target) ||
-      target.includes("..") || target.includes("//") || !target.endsWith("/")) {
+  if (typeof target !== "string") throw new Error("backup_remote_target_invalid");
+  const separator = target.indexOf(":");
+  if (separator <= 0 || target.indexOf(":", separator + 1) !== -1) {
+    throw new Error("backup_remote_target_invalid");
+  }
+  const authority = target.slice(0, separator);
+  const directory = target.slice(separator + 1);
+  const segments = directory.split("/");
+  if (!/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/.test(authority) ||
+      !directory.startsWith("/") || !directory.endsWith("/") ||
+      directory.length < 2 || directory.includes("//") ||
+      segments.slice(1, -1).some(segment =>
+        !/^[A-Za-z0-9._-]+$/.test(segment) || segment === "." || segment === "..")) {
     throw new Error("backup_remote_target_invalid");
   }
   return target;
@@ -206,10 +216,10 @@ export async function verifyPostgresBackup({ backupPath, key, pgRestoreCommand =
 
 async function copyOffHost(path, rawTarget, env) {
   const target = safeRemoteTarget(rawTarget);
-  const match = /^([A-Za-z0-9._-]+@[A-Za-z0-9.-]+):(\\/[A-Za-z0-9._/-]+\\/)$/.exec(target);
-  if (!match) throw new Error("backup_remote_target_invalid");
-  const userHost = match[1];
-  const remoteFile = match[2] + basename(path);
+  const separator = target.indexOf(":");
+  const userHost = target.slice(0, separator);
+  const remoteDirectory = target.slice(separator + 1);
+  const remoteFile = remoteDirectory + basename(path);
   const rsyncEnv = {
     ...env,
     RSYNC_RSH: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10"
@@ -223,7 +233,7 @@ async function copyOffHost(path, rawTarget, env) {
       "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10",
       userHost, "sha256sum -- " + remoteFile
     ], env);
-    const matchHash = /^([a-f0-9]{64})\\s/.exec(remoteHash);
+    const matchHash = /^([a-f0-9]{64})\s/.exec(remoteHash);
     if (!matchHash) throw new Error("remote_backup_hash_invalid");
     return { target, sha256: matchHash[1] };
   } catch {
