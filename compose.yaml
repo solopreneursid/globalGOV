@@ -116,6 +116,25 @@ services:
       PGSSLMODE: disable
     networks: [data]
 
+  policy-review:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "source-policy-admin.mjs"]
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable
+    networks: [data]
+
   monitor:
     build:
       context: .
