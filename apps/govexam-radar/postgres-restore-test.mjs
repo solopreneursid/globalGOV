@@ -38,10 +38,21 @@ export async function runPostgresRestoreTest({
     throw new Error("restore_test_database_name_invalid");
   }
 
-  const maintenanceEnv = { ...env, PGDATABASE: env.PGMAINTENANCE_DATABASE || "postgres" };
+  const restoreUser = env.RESTORE_TEST_DB_USER || "";
+  const restorePassword = env.RESTORE_TEST_DB_PASSWORD || "";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(restoreUser) || !restorePassword ||
+      restoreUser === env.PGUSER || restoreUser === env.POSTGRES_USER) {
+    await rm(restored.directory, { recursive: true, force: true });
+    throw new Error("restore_test_role_required");
+  }
+  const maintenanceEnv = {
+    ...env, PGUSER: restoreUser, PGPASSWORD: restorePassword,
+    PGDATABASE: env.PGMAINTENANCE_DATABASE || "postgres"
+  };
   const maintenancePool = await createPostgresPoolFromEnv(maintenanceEnv);
   let created = false;
   let testPool = null;
+  let primaryError = null;
   try {
     await maintenancePool.query("CREATE DATABASE \"" + database + "\" TEMPLATE template0 ENCODING 'UTF8'");
     created = true;
@@ -50,7 +61,7 @@ export async function runPostgresRestoreTest({
         "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges",
         "--dbname", database, restored.dumpPath
       ], {
-        env: { ...env, PGDATABASE: database },
+        env: { ...maintenanceEnv, PGDATABASE: database },
         timeout: 10 * 60 * 1000,
         maxBuffer: 4 * 1024 * 1024,
         stdio: ["ignore", "pipe", "pipe"]
@@ -59,7 +70,7 @@ export async function runPostgresRestoreTest({
       throw new Error("full_postgres_restore_failed");
     }
 
-    testPool = await createPostgresPoolFromEnv({ ...env, PGDATABASE: database });
+    testPool = await createPostgresPoolFromEnv({ ...maintenanceEnv, PGDATABASE: database });
     const migrations = await testPool.query(
       "SELECT version FROM schema_migrations WHERE version IN ($1,$2) ORDER BY version",
       ["001_core", "002_first_party_operations"]
@@ -100,13 +111,22 @@ export async function runPostgresRestoreTest({
       restoreVerifiedAt: verifiedAt,
       temporaryDatabaseDropped: true
     };
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
     if (testPool) await testPool.end().catch(() => {});
+    let cleanupFailed = false;
     if (created) {
-      await maintenancePool.query('DROP DATABASE IF EXISTS "' + database + '" WITH (FORCE)').catch(() => {});
+      try {
+        await maintenancePool.query('DROP DATABASE IF EXISTS "' + database + '" WITH (FORCE)');
+      } catch {
+        cleanupFailed = true;
+      }
     }
     await maintenancePool.end();
     await rm(restored.directory, { recursive: true, force: true });
+    if (cleanupFailed && !primaryError) throw new Error("restore_test_database_cleanup_failed");
   }
 }
 
