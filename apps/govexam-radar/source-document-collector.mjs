@@ -14,7 +14,7 @@ import { SOURCES } from "./worker.js";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const hash = value => createHash("sha256").update(value).digest("hex");
 
-async function persistDocumentAndReview(pool, document, recordType, evidence, now) {
+async function persistDocumentAndReview(pool, document, recordType, evidence, now, connectorRun = null) {
   if (!pool || typeof pool.connect !== "function") throw new Error("postgres_pool_required");
   const client = await pool.connect();
   try {
@@ -42,6 +42,18 @@ async function persistDocumentAndReview(pool, document, recordType, evidence, no
        VALUES ($1,$2,$3,$4,$5::jsonb,'pending',$6)`,
       [queueId, document.sourceId, document.sha256, recordType, JSON.stringify(evidence), now]
     );
+    if (connectorRun) {
+      await client.query(
+        `INSERT INTO source_connector_runs
+         (id,source_id,started_at,finished_at,state,automation_status,http_status,fetched_bytes,
+          documents_found,notices_candidate,accepted,rejected,source_url,response_sha256,error_code,details)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,$10,$11,$12,$13,$14::jsonb)`,
+        [randomUUID(), document.sourceId, connectorRun.startedAt, now, connectorRun.state,
+          connectorRun.automationStatus, connectorRun.httpStatus, connectorRun.fetchedBytes,
+          connectorRun.documentsFound, connectorRun.rejected, document.sourceUrl,
+          document.sha256, connectorRun.errorCode, JSON.stringify(connectorRun.details || {})]
+      );
+    }
     await client.query("COMMIT");
     return { queueId, documentSha256: document.sha256, reviewState: "pending" };
   } catch (error) {
@@ -56,34 +68,62 @@ export async function collectOfficialRecruitmentDocument({
   sourceId, sourceUrl, root = process.env.DOCUMENT_STORE_DIR, fetcher = fetch, pool, now = Date.now()
 } = {}) {
   if (!root) throw new Error("document_store_directory_required");
+  if (!pool || typeof pool.query !== "function") throw new Error("postgres_pool_required");
   const source = SOURCES.find(item => item.id === sourceId);
   if (!source) throw new Error("unknown_registered_source");
-  const policy = await getApprovedSourcePolicy(pool, source, now);
-  if (!policy) throw new Error("source_automation_not_approved_by_reviewed_policy");
-  const fetched = await fetchOfficialSource({
-    source, url: sourceUrl, fetcher, policyOverride: policy,
-    maxBytes: policy.maxBytes, minIntervalMs: policy.minIntervalMs
-  });
-  const bytes = fetched.bytes;
-  const stored = await storePdf({ root, bytes });
-  const text = extractPdfText(bytes);
-  const report = extractRecruitmentEvidence({
-    sourceId, sourceUrl, documentBytes: bytes, text,
-    observedAt: new Date(now).toISOString(), provenance: "official_https_fetch"
-  });
-  const document = {
-    ...stored, sourceId, sourceUrl: report.sourceUrl,
-    provenance: "official_https_fetch", textSha256: report.textSha256
-  };
-  const review = await persistDocumentAndReview(
-    pool, document, "recruitment_notice", report, now
-  );
-  return {
-    document: { sha256: stored.sha256, storageKey: stored.storageKey, bytes: stored.bytes },
-    review,
-    extraction: { fields: Object.keys(report.fields), conflicts: report.conflicts, reviewState: report.reviewState },
-    publicationAuthorized: false
-  };
+  const startedAt = now;
+  let policy = null;
+  let fetched = null;
+  try {
+    policy = await getApprovedSourcePolicy(pool, source, now);
+    if (!policy) throw new Error("source_automation_not_approved_by_reviewed_policy");
+    fetched = await fetchOfficialSource({
+      source, url: sourceUrl, fetcher, policyOverride: policy,
+      maxBytes: policy.maxBytes, minIntervalMs: policy.minIntervalMs
+    });
+    const bytes = fetched.bytes;
+    const stored = await storePdf({ root, bytes });
+    const text = extractPdfText(bytes);
+    const report = extractRecruitmentEvidence({
+      sourceId, sourceUrl, documentBytes: bytes, text,
+      observedAt: new Date(now).toISOString(), provenance: "official_https_fetch"
+    });
+    const document = {
+      ...stored, sourceId, sourceUrl: report.sourceUrl,
+      provenance: "official_https_fetch", textSha256: report.textSha256
+    };
+    const review = await persistDocumentAndReview(
+      pool, document, "recruitment_notice", report, now,
+      {
+        startedAt, state: stored.deduplicated ? "no_change" : "ok",
+        automationStatus: policy.automationStatus, httpStatus: fetched.status,
+        fetchedBytes: bytes.length, documentsFound: 1, rejected: 0,
+        errorCode: null, details: { policyReviewer: policy.reviewerLabel, policyReviewedAt: policy.reviewedAt }
+      }
+    );
+    return {
+      document: { sha256: stored.sha256, storageKey: stored.storageKey, bytes: stored.bytes },
+      review,
+      extraction: { fields: Object.keys(report.fields), conflicts: report.conflicts, reviewState: report.reviewState },
+      publicationAuthorized: false
+    };
+  } catch (error) {
+    const errorCode = String(error?.message || "collector_error")
+      .toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 100);
+    const blocked = /policy|not_approved|robots|not_allowlisted|host_not_allowed|rate_limit|redirect/.test(errorCode);
+    const rejected = /invalid_pdf|document_provenance_conflict|extraction/.test(errorCode);
+    await pool.query(
+      `INSERT INTO source_connector_runs
+       (id,source_id,started_at,finished_at,state,automation_status,http_status,fetched_bytes,
+        documents_found,notices_candidate,accepted,rejected,source_url,response_sha256,error_code,details)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,$10,$11,$12,$13,$14::jsonb)`,
+      [randomUUID(), source.id, startedAt, now, blocked ? "blocked" : rejected ? "rejected" : "error",
+        policy?.automationStatus || "not_assessed", fetched?.status || null,
+        fetched?.bytes?.length || 0, fetched ? 1 : 0, rejected ? 1 : 0, sourceUrl,
+        fetched?.sha256 || null, errorCode, JSON.stringify({ policyReviewed: Boolean(policy) })]
+    ).catch(() => {});
+    throw error;
+  }
 }
 
 export async function registerManualRecruitmentDocument({
@@ -117,7 +157,12 @@ export async function registerManualRecruitmentDocument({
     limitations: ["Local document origin is founder-supplied and not independently fetched by globalGOV.",
       "No vacancy fields are extracted or published by this intake operation."]
   };
-  const review = await persistDocumentAndReview(pool, document, "recruitment_notice", evidence, now);
+  const review = await persistDocumentAndReview(pool, document, "recruitment_notice", evidence, now, {
+    startedAt: now, state: stored.deduplicated ? "no_change" : "ok",
+    automationStatus: "manual_review", httpStatus: null, fetchedBytes: stored.bytes,
+    documentsFound: 1, rejected: 0, errorCode: null,
+    details: { submittedByFounder: true }
+  });
   return {
     document: { sha256: stored.sha256, storageKey: stored.storageKey, bytes: stored.bytes },
     review,
