@@ -10,6 +10,7 @@ COPY apps/govexam-radar/ ./
 COPY infra/self-hosted/postgres/ ./migrations/
 
 RUN mkdir -p /var/lib/globalgov/documents \
+    && chmod 700 /var/lib/globalgov/documents \
     && chown -R node:node /app /var/lib/globalgov
 
 USER node
