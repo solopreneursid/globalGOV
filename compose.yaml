@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-globalgov}
-      POSTGRES_USER: ${POSTGRES_USER:-globalgov}
+      POSTGRES_USER: ${POSTGRES_USER:-globalgov_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       APP_DB_USER: ${APP_DB_USER:?Set APP_DB_USER in .env}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
