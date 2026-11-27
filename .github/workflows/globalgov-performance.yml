@@ -1,0 +1,21 @@
+name: globalGOV bounded performance smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/govexam-radar/performance-smoke.mjs'
+      - '.github/workflows/globalgov-performance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bounded real staging reads
+        run: node apps/govexam-radar/performance-smoke.mjs

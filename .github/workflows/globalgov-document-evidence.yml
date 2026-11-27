@@ -30,7 +30,7 @@ jobs:
       - name: Install Poppler for synthetic PDF round trip
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils
       - name: Verify extraction, source boundaries, eligibility and encrypted restore
-        run: node --test apps/govexam-radar/reviewed-catalog.test.mjs apps/govexam-radar/recruitment-evidence.test.mjs apps/govexam-radar/recruitment-post-tables.test.mjs apps/govexam-radar/recruitment-events.test.mjs apps/govexam-radar/recruitment-ledger.test.mjs apps/govexam-radar/encrypted-backup.test.mjs apps/govexam-radar/recruitment-pdf.test.mjs
+        run: node --test apps/govexam-radar/usajobs-probe.test.mjs apps/govexam-radar/reviewed-catalog.test.mjs apps/govexam-radar/recruitment-evidence.test.mjs apps/govexam-radar/recruitment-post-tables.test.mjs apps/govexam-radar/recruitment-events.test.mjs apps/govexam-radar/recruitment-ledger.test.mjs apps/govexam-radar/encrypted-backup.test.mjs apps/govexam-radar/recruitment-pdf.test.mjs
   source-probe:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
