@@ -34,4 +34,5 @@ RUN useradd --uid 1000 --create-home globalgov \
     && chown -R globalgov:globalgov /var/lib/globalgov /home/globalgov
 
 USER globalgov
-ENTRYPOINT ["node", "backup-scheduler.mjs"]
+ENTRYPOINT ["node"]
+CMD ["backup-scheduler.mjs"]
