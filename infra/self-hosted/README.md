@@ -21,13 +21,13 @@ This directory is the owner-operated deployment target for globalGOV Option B.
 
 Use only an empty disposable PostgreSQL database. This does not migrate D1 data.
 
-1. Copy `.env.example` to `.env`.
-2. Set `PUBLIC_DOMAIN=localhost`, `ACME_EMAIL` to a valid contact address, and `POSTGRES_PASSWORD` to a random hex secret (for example, generate one with `openssl rand -hex 32`).
+1. Copy `.env.example` to `.env` and `backup.env.example` to `.env.backup`.
+2. Set `PUBLIC_DOMAIN=localhost`, `ACME_EMAIL` to a valid contact address, and replace every database-role password with a unique random secret (for example, `openssl rand -hex 32`).
 3. Validate configuration: `docker compose config --quiet`.
-4. Build the image: `docker compose build`.
-5. Initialize an empty PostgreSQL database: `docker compose --profile tools run --rm migrate`.
-6. Start the local stack: `docker compose up -d`.
-7. Check `docker compose ps` and `docker compose logs app scheduler`.
+4. Build the runtime and backup images: `docker compose build`.
+5. Initialize an empty PostgreSQL database and grant the separate runtime roles: `docker compose --profile tools run --rm migrate`.
+6. Start only the local app-facing services: `docker compose up -d app scheduler monitor caddy`. Do not start `backup` or `restore-scheduler` until the encryption key, remote target and pinned SSH host key are configured.
+7. Check `docker compose ps` and `docker compose logs app scheduler monitor`.
 
 For a local Caddy certificate, the browser may require trusting Caddy's local development CA. Do not expose this localhost configuration publicly. A public host needs a real domain pointed directly to the owner-controlled server, inbound TCP 80/443, and a publicly trusted certificate.
 
@@ -65,7 +65,7 @@ See [the architecture and migration plan](../../docs/architecture/SELF_HOSTED.md
 - Automated document intake requires an explicit, unexpired database policy review, an exact official HTTPS host, an allowlisted GET path/content type, a successful `robots.txt` check, bounded response size and manual review after extraction.
 - HTTP redirects, login pages, robots denial and unknown policy status stop collection. No login, CAPTCHA bypass, proxy rotation or third-party scraper is used.
 - SSB remains `clarification_required`. Its `robots.txt` login redirect is not bypassed. The public directory link remains available, and founder-supplied PDFs can be added to the private manual-review queue.
-- Manual SSB PDF intake (after downloading from the official site): `chmod 600 /secure/path/notice.pdf`, then run `node source-document-collector.mjs manual ssb-india-recruitment https://recruitment.ssb.gov.in/official-notice-path.pdf /secure/path/notice.pdf`. The source URL must use the registered SSB host. The operation stores the original by SHA-256 and queues it as pending review; it does not publish.
+- Manual SSB PDF intake (after downloading from the official site): keep the file private and make it readable by the container's non-root `node` user (UID 1000), e.g. `sudo chown 1000:1000 /secure/path/notice.pdf && chmod 600 /secure/path/notice.pdf`. Then run `docker compose run --rm -v /secure/path/notice.pdf:/tmp/notice.pdf:ro app node source-document-collector.mjs manual ssb-india-recruitment https://recruitment.ssb.gov.in/official-notice-path.pdf /tmp/notice.pdf`. The source URL must use the registered SSB host. The operation stores the original by SHA-256 and queues it as pending review; it does not publish.
 - An automated PDF fetch is possible only after a founder records an approved, time-limited policy review. The collector still obeys robots rules and redirect restrictions. The public website copyright policy is not treated as automated-access approval.
 
 ## Encrypted backups and recovery
@@ -87,4 +87,4 @@ Before enabling the backup service:
 5. Run `docker compose config --quiet`, build the stack, apply migrations to an empty test database, then start the backup service.
 6. Verify `backup_runs` shows both local archives, remote hashes, archive verification, and the latest monthly restore timestamps. A successful CI image build does not count as an actual backup or restore test.
 
-Use `cd apps/govexam-radar && npm run backup:restore-test` for an owner-triggered restore test against the latest successful backup. It does not modify the source database; it creates and drops a temporary database on the same PostgreSQL server.
+Use `docker compose run --rm restore-scheduler node postgres-restore-test.mjs` for an owner-triggered restore test against the latest successful backup. It does not modify the source database; it creates and drops a temporary database on the same PostgreSQL server.
