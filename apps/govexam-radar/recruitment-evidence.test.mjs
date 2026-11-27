@@ -32,3 +32,11 @@ test('eligibility uses reviewed cutoff and never asserts complete eligibility',(
  rules.requirements[0].relaxationsReviewed=false;
  assert.equal(screenReviewedRequirements(rules,{dateOfBirth:'1980-01-01'}).status,'review_required');
 });
+
+test('reopened window is not the age cutoff or a replacement for unobserved original dates',()=>{
+ const r=fixture('No. SDSC SHAR/RMT/03/2026\nIt is hereby informed that the online application portal is hereby reopened from 13.11.2026 10:00 Hrs.\nto 16.11.2026 23:59 Hrs.\nThe eligibility criteria (Essential Qualifications, Age etc.) for the advertised posts will continue to be\nreckoned as on 09.11.2026.');
+ assert.equal(r.fields.reopenedWindow.value.start.instant,'2026-11-13T04:30:00.000Z');
+ assert.equal(r.fields.reopenedWindow.value.end.instant,'2026-11-16T18:29:00.000Z');
+ assert.equal(r.fields.ageCutoff.value.date,'2026-11-09');assert.equal(r.fields.closing,undefined);
+ assert.equal(r.events[0].type,'application_reopened');assert.equal(r.publicLaunchAuthorized,false);
+});

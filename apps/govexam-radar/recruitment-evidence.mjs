@@ -62,6 +62,20 @@ export function extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes,tex
     const value=['opening','closing','examDate','ageCutoff'].includes(key)?indiaCalendarDate(raw):key==='vacancies'?(/^[1-9]\d{0,5}$/.test(raw)?Number(raw):null):raw;
     (candidates[key]??=[]).push({value,raw,page:pi+1,line:li+1});
    }
+   // SDSC SHAR official reopening notice: an explicitly stated replacement
+   // application window is not the original window or eligibility cutoff.
+   // Join up to three adjacent extracted lines within the same page only.
+   const combined=lines.slice(li,li+3).map(s=>s.trim().replace(/[ \t]+/g,' ')).join(' ');
+   const range=/^(?:It is hereby informed that the )?online application portal is hereby reopened from\s+(\d{1,2}\.\d{1,2}\.20\d{2})\s+(\d{2}:\d{2})\s*hrs\.?\s+to\s+(\d{1,2}\.\d{1,2}\.20\d{2})\s+(\d{2}:\d{2})\s*hrs\.?/i.exec(combined);
+   if(range){
+    const start=indiaCalendarDate(range[1]+' ('+range[2]+' hrs)'),end=indiaCalendarDate(range[3]+' ('+range[4]+' hrs)');
+    if(start&&end&&start.instant<=end.instant){
+     (candidates.reopenedWindow??=[]).push({value:{start,end},raw:range[0],page:pi+1,line:li+1,lineEnd:Math.min(lines.length,li+3)});
+     events.push({type:'application_reopened',page:pi+1,line:li+1});
+    }else (candidates.reopenedWindow??=[]).push({value:null,raw:range[0],page:pi+1,line:li+1});
+   }
+   const cutoff=/^(?:All other terms and conditions of the said advertisement remain unchanged\.\s*)?The eligibility criteria \(Essential Qualifications, Age etc\.\) for the advertised posts will continue to be reckoned as on\s+(\d{1,2}\.\d{1,2}\.20\d{2})/i.exec(combined);
+   if(cutoff)(candidates.ageCutoff??=[]).push({value:indiaCalendarDate(cutoff[1]),raw:cutoff[0],page:pi+1,line:li+1,lineEnd:Math.min(lines.length,li+3)});
    // Only short status headings, never names, registration numbers or result lists.
    for(const [type,regex] of eventPatterns)if(regex.test(line)&&line.length<=180)events.push({type,page:pi+1,line:li+1});
   }
