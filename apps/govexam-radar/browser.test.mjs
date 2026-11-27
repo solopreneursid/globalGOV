@@ -245,3 +245,58 @@ test('reviewed evidence UI is honest about an empty approved catalog in full and
   }
  }finally{await page.close();}
 });
+
+test('USAJOBS archive paginates without skipped records and renders archived text as inert text',async()=>{
+ const makeRecord=n=>({controlNumber:String(700000+n),announcementNumber:'ANN-'+n,title:'Archive Record '+n,agency:'Test federal agency',department:'Test department',positionOpenDate:'2025-11-01',positionCloseDate:'2025-12-01',effectiveCloseDate:'2025-12-01',status:'historical_closed',sourceStatus:'Applications under review',minimumSalary:90000,maximumSalary:110000,salaryType:'Per Year',minimumGrade:'12',maximumGrade:'13',payScale:'GS',totalOpenings:'1',hiringPaths:['The public'],series:['2210'],locations:[{city:'Washington',state:'DC',country:'United States'}]});
+ for(const width of [320,1440]){
+  const page=await browser.newPage({viewport:{width,height:900}}),errors=[],requests=[];
+  page.on('pageerror',error=>errors.push(String(error)));
+  await page.addInitScript(()=>{window.__archiveXss=0;});
+  await page.route('**/api/usajobs/history?*',async route=>{
+   const url=new URL(route.request().url()),cursor=url.searchParams.get('cursor');requests.push(url);
+   const records=cursor?Array.from({length:25},(_,i)=>makeRecord(i+25)):Array.from({length:25},(_,i)=>makeRecord(i));
+   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({records,rejected:{},totalCount:50,pageSize:500,nextCursor:cursor?null:'next%3D%3D',retrievedAt:'2026-11-27T00:00:00.000Z',source:'USAJOBS Historic JOAs public data'})});
+  });
+  await page.route('**/api/usajobs/announcement-text?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({announcement:{controlNumber:'700000',fields:{summary:{label:'Summary',text:'Historical text <img src=x onerror=window.__archiveXss=1>'}}},retrievedAt:'2026-11-27T00:00:00.000Z'})}));
+  try{
+   await page.goto(origin+'/usajobs-history',{waitUntil:'domcontentloaded'});
+   await page.locator('#records .record h3').first().waitFor();
+   assert.match(await page.locator('h1').innerText(),/Past USAJOBS announcements/);
+   assert.match(await page.locator('.notice').innerText(),/Historical data only/);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+3),true);
+   await page.locator('#series').fill('2210');
+   const searchResponse=page.waitForResponse(response=>response.url().includes('/api/usajobs/history?')&&new URL(response.url()).searchParams.get('series')==='2210');
+   await page.locator('#history-form button[type="submit"]').click();
+   await searchResponse;
+   assert.equal(await page.locator('#records .record').count(),20);
+   const firstQuery=requests.find(x=>x.searchParams.get('series')==='2210');
+   assert.equal(firstQuery.searchParams.get('series'),'2210');
+   assert.ok(firstQuery.searchParams.has('closeFrom')&&firstQuery.searchParams.has('closeTo'));
+   await page.locator('#records .record').first().getByRole('button',{name:'View archived announcement text'}).click();
+   await page.locator('.detail').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.detail')?.textContent?.includes('Historical text'));
+   assert.match(await page.locator('.detail').innerText(),/Historical text <img src=x onerror=window.__archiveXss=1>/);
+   assert.equal(await page.locator('.detail img').count(),0);
+   assert.equal(await page.evaluate(()=>window.__archiveXss),0);
+   await page.locator('#next').click();
+   assert.equal(await page.locator('#records .record').count(),5);
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 20');
+   assert.equal(await page.locator('#next').innerText(),'Load next data page');
+   await page.locator('#next').click();
+   await page.waitForFunction(()=>document.querySelector('#page-label')?.textContent.startsWith('Page 3'));
+   assert.equal(await page.locator('#records .record').count(),20);
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 25');
+   assert.equal(await page.locator('#records .record h3').last().innerText(),'Archive Record 44');
+   assert.ok(requests.some(x=>x.searchParams.get('cursor')==='next%3D%3D'));
+   await page.locator('#previous').click();
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 20');
+   await page.locator('#next').click();
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 25');
+   await page.locator('#next').click();
+   assert.equal(await page.locator('#records .record').count(),5);
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 45');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+3),true);
+   assert.deepEqual(errors,[]);
+  }finally{await page.close();}
+ }
+});
