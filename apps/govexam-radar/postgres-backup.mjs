@@ -255,7 +255,10 @@ export async function createPostgresBackup({
     "OR (backup_runs.state='running' AND backup_runs.started_at < EXCLUDED.started_at - 1800000) RETURNING id",
     [runId, startedAt, finalPath, remoteTarget || null]
   );
-  if (claim.rowCount !== 1) return { state: "already_claimed", runId };
+  if (claim.rowCount !== 1) {
+    const existing = await pool.query("SELECT state FROM backup_runs WHERE id=$1", [runId]);
+    return { state: existing.rows[0]?.state === "ok" ? "already_completed" : "already_running", runId };
+  }
 
   let archiveVerified = false;
   try {
