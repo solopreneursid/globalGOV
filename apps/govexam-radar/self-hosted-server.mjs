@@ -56,7 +56,7 @@ export function createRuntimeEnvironment({ db, pool, env = process.env } = {}) {
   const runtime = {
     DB: db,
     SOURCE_POLICY_POOL: pool,
-    REQUIRE_SOURCE_POLICY_REGISTRY: env.REQUIRE_SOURCE_POLICY_REGISTRY === "true" ? "true" : "false",
+    REQUIRE_SOURCE_POLICY_REGISTRY: "true",
     USAJOBS_FETCH: fetch
   };
   if (env.INGEST_HMAC_KEY) runtime.INGEST_HMAC_KEY = env.INGEST_HMAC_KEY;
