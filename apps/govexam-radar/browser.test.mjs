@@ -233,3 +233,15 @@ test('full application uses strict script CSP and external fixed handlers',async
   assert.deepEqual(await page.evaluate(()=>window.__ggViolations.filter(x=>x.startsWith('script-src'))),[]);
  }finally{await page.close();}
 });
+
+test('reviewed evidence UI is honest about an empty approved catalog in full and lite',async()=>{
+ const page=await browser.newPage({viewport:{width:375,height:820}});
+ try{
+  for(const route of ['/','/lite']){
+   await page.goto(origin+route,{waitUntil:'domcontentloaded'});
+   await page.locator('#reviewed-recruitment-posts').waitFor();
+   await page.locator('#reviewed-recruitment-posts p').filter({hasText:'No reviewed documents are available'}).waitFor();
+   assert.equal(await page.locator('#reviewed-recruitment-posts article').count(),0);
+  }
+ }finally{await page.close();}
+});

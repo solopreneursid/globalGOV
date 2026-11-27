@@ -1,5 +1,7 @@
 // HQventures globalGOV — zero-dependency Cloudflare Worker, portable Fetch API.
 import { FULL_HTML, FULL_APP_JS } from "./full-ui.mjs";
+import { readReviewedCatalog } from "./reviewed-catalog.mjs";
+import { REVIEWED_UI_JS } from "./reviewed-ui.mjs";
 import { ENHANCE_JS } from "./enhance.mjs";
 import { FULL_CSS } from "./full-css.mjs";
 import { handleCommunity } from "./community-api.mjs";
@@ -104,11 +106,12 @@ export default {
     if(path==="/portable-bookmarks.js")return respond(PORTABLE_JS,200,"text/javascript; charset=utf-8",{"Cache-Control":"public, max-age=120"});
     if (path === "/" || path === "/index.html") {
       const CLASSIC_CSP = "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'self'; frame-ancestors 'none'";
-      return respond(FULL_HTML.replace("</main>","</main>"+PUBLIC_FOOTER), 200, "text/html; charset=utf-8", { "Content-Security-Policy": CLASSIC_CSP, "Cache-Control": "public, max-age=120", "X-Robots-Tag":"noindex, nofollow" });
+      return respond(FULL_HTML.replace("</main>","</main>"+PUBLIC_FOOTER).replace("</body>",'<script defer src="/reviewed.js"></script></body>'), 200, "text/html; charset=utf-8", { "Content-Security-Policy": CLASSIC_CSP, "Cache-Control": "public, max-age=120", "X-Robots-Tag":"noindex, nofollow" });
     }
-    if (path === "/lite" || path === "/lite/") return respond(LITE_HTML, 200, "text/html; charset=utf-8", { "Content-Security-Policy": CSP, "Cache-Control": "public, max-age=120", "X-Robots-Tag":"noindex, nofollow" });
+    if (path === "/lite" || path === "/lite/") return respond(LITE_HTML.replace("</body>",'<script defer src="/reviewed.js"></script></body>'), 200, "text/html; charset=utf-8", { "Content-Security-Policy": CSP, "Cache-Control": "public, max-age=120", "X-Robots-Tag":"noindex, nofollow" });
     if (path === "/lite.css") return respond(LITE_CSS, 200, "text/css; charset=utf-8", { "Cache-Control": "public, max-age=120" });
     if (path === "/lite.js") return respond(LITE_JS, 200, "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=120" });
+    if (path === "/reviewed.js") return respond(REVIEWED_UI_JS, 200, "text/javascript; charset=utf-8", {"Cache-Control":"public, max-age=120"});
     if (path === "/full-app.js") return respond(FULL_APP_JS, 200, "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=120" });
     if (path === "/full.css") return respond(FULL_CSS, 200, "text/css; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
     if (path === "/enhance.js") return respond(ENHANCE_JS, 200, "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=120" });
@@ -119,7 +122,7 @@ export default {
     if (path === "/sw.js") return respond(SW_JS, 200, "text/javascript; charset=utf-8", { "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" });
     if (path === "/icon.svg") return respond(ICON, 200, "image/svg+xml", { "Cache-Control": "public, max-age=86400" });
     if (path === "/manifest.webmanifest") return respond(MANIFEST, 200, "application/manifest+json");
-    if (path === "/openapi.json") { const publicSpec=structuredClone(OPENAPI); publicSpec.info.version=VERSION; publicSpec.info.description="Government recruitment website directory and source-gated UK, ISRO and SSB notices. Check the original notice before applying."; delete publicSpec.paths["/api/moderation/reports"]; delete publicSpec.paths["/api/moderation/decide"]; return JSONResponse(publicSpec, 200, "public, max-age=3600"); }
+    if (path === "/openapi.json") { const publicSpec=structuredClone(OPENAPI); publicSpec.info.version=VERSION; publicSpec.info.description="Government recruitment website directory and source-gated UK, ISRO and SSB notices. Check the original notice before applying."; publicSpec.paths["/api/reviewed-recruitment"]={get:{summary:"Reviewed recruitment documents and exam updates (staging only)",responses:{"200":{description:"Validated reviewed data or explicit withheld state"}}}}; delete publicSpec.paths["/api/moderation/reports"]; delete publicSpec.paths["/api/moderation/decide"]; return JSONResponse(publicSpec, 200, "public, max-age=3600"); }
     if (path === "/robots.txt") return respond("User-agent: *\nDisallow: /\n", 200, "text/plain; charset=utf-8");
     if (path === "/api/health") return JSONResponse({ status: "ok", service: "hqventures-govradar", version: VERSION, serverTime: new Date().toISOString() }, 200, "no-store");
     if(path==="/release-preview")return respond(RELEASE_PREVIEW_HTML,200,"text/html; charset=utf-8",{"Content-Security-Policy":CSP,"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
@@ -128,6 +131,7 @@ export default {
 
     if (path === "/api/jurisdictions") return JSONResponse(filterSources(SOURCES,url.searchParams),200,"public, max-age=600");
     if (path === "/api/source-status") return getPortalStatus(env?.DB, SOURCES);
+    if (path === "/api/reviewed-recruitment") return JSONResponse(await readReviewedCatalog(),200,"no-store");
     if (path === "/api/notices") return serveOfficialNotices(env?.DB,url.searchParams,"approved_staging");
     if (path === "/api/release-preview/notices") return serveOfficialNotices(env?.DB,url.searchParams,"uk_only_release_preview");
     if (path === "/api/ingestion-status") return servePublicIngestionStatus(env?.DB);
