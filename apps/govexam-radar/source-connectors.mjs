@@ -16,7 +16,7 @@ const HOST_POLICIES = Object.freeze({
     automationStatus: "research_only",
     automatedCollectionEnabled: true,
     reuseStatus: "commercial_reuse_review_required",
-    allowedPaths: Object.freeze(["/rssFeeds.action"]),
+    allowedPaths: Object.freeze(["/rssFeeds.action", "/rss/newJobPostingsFeed.rss"]),
     allowedContentTypes: Object.freeze(["application/rss+xml", "application/xml", "text/xml"])
   }),
   "www.isro.gov.in": Object.freeze({
