@@ -14,6 +14,10 @@ on:
     paths:
       - 'apps/govexam-radar/**'
       - '.github/workflows/govexam-radar-ci.yml'
+      - 'infra/self-hosted/**'
+      - 'docs/architecture/**'
+      - 'README.md'
+      - 'MIGRATION.md'
 jobs:
   test:
     runs-on: ubuntu-24.04
