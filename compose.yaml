@@ -14,8 +14,6 @@ services:
       BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
       RESTORE_TEST_DB_USER: ${RESTORE_TEST_DB_USER:?Set RESTORE_TEST_DB_USER in .env}
       RESTORE_TEST_DB_PASSWORD: ${RESTORE_TEST_DB_PASSWORD:?Set RESTORE_TEST_DB_PASSWORD in .env}
-      RESTORE_TEST_DB_USER: ${RESTORE_TEST_DB_USER:?Set RESTORE_TEST_DB_USER in .env}
-      RESTORE_TEST_DB_PASSWORD: ${RESTORE_TEST_DB_PASSWORD:?Set RESTORE_TEST_DB_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/self-hosted/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -203,7 +201,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backup
-    command: ["node", "restore-scheduler.mjs"]
+    command: ["restore-scheduler.mjs"]
     restart: unless-stopped
     depends_on:
       postgres:
