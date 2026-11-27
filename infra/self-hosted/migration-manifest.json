@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "status": "inventory_required_before_cutover",
+  "sources": [
+    {
+      "id": "canonical-cloudflare-d1",
+      "kind": "cloudflare_d1",
+      "database_id": "b1f499a6-283b-47e8-8cd7-ef2b5f7245bc",
+      "tables": [
+        "official_job_notices",
+        "source_ingest_runs",
+        "source_feed_cursors",
+        "notice_revisions",
+        "portal_status",
+        "portal_history",
+        "members",
+        "posts",
+        "replies",
+        "votes",
+        "reports",
+        "moderation_actions"
+      ],
+      "export_required": true
+    },
+    {
+      "id": "retired-isolated-uk-d1",
+      "kind": "cloudflare_d1",
+      "database_id": null,
+      "tables": "inventory_from_cloudflare_before_cutover",
+      "export_required": true
+    },
+    {
+      "id": "local-recruitment-evidence-ledger",
+      "kind": "sqlite",
+      "path": "founder-controlled-local-database",
+      "tables": [
+        "document_evidence"
+      ],
+      "export_required_if_present": true
+    },
+    {
+      "id": "browser-bookmarks",
+      "kind": "client_local_storage",
+      "export_method": "existing globalGOV bookmark export/import UI",
+      "export_required_if_user_wants_to_preserve": true
+    },
+    {
+      "id": "repository-static-catalogs",
+      "kind": "git_tracked_files",
+      "export_method": "repository checkout",
+      "export_required": true
+    }
+  ],
+  "notes": [
+    "Database identifiers are locators, not credentials.",
+    "Do not infer empty databases from retired Workers; export and verify them.",
+    "Secrets are intentionally excluded from database exports and must be rotated/provisioned separately."
+  ]
+}
