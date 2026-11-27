@@ -27,6 +27,15 @@ export function screenReviewedRequirements(rules,profile){
    result=profile.citizenshipCodes.some(c=>r.acceptedCodes.includes(c))?'matches':profile.citizenshipComplete===true?'does_not_match':'unknown';
   if(r.kind==='qualification_all'&&r.equivalenceReviewed===true&&Array.isArray(r.groups)&&r.groups.length>0&&r.groups.length<=10&&r.groups.every(codeList)&&codeList(profile.qualificationCodes))
    result=r.groups.every(g=>g.some(c=>profile.qualificationCodes.includes(c)))?'matches':'unknown';
+  // Category-specific age rules require an explicit reviewed table including
+  // the ordinary category; no additive or inferred relaxation.
+  if(r.kind==='age_category'&&r.relaxationsReviewed===true&&r.categorySpecific===true&&r.combinationsReviewed===true&&validDate(r.cutoff)&&Array.isArray(r.ranges)&&r.ranges.length>0&&r.ranges.length<=30&&typeof profile.reviewedCategoryCode==='string'&&profile.categoryFactsConfirmed===true){
+   const entries=r.ranges;
+   if(entries.every(x=>x&&typeof x.code==='string'&&/^[A-Z0-9_-]{1,50}$/.test(x.code)&&Number.isInteger(x.min)&&Number.isInteger(x.max)&&x.min>=0&&x.max<=120&&x.min<=x.max)&&new Set(entries.map(x=>x.code)).size===entries.length){
+    const entry=entries.find(x=>x.code===profile.reviewedCategoryCode);
+    if(entry){try{const age=ageAt(profile.dateOfBirth,r.cutoff);result=age>=entry.min&&age<=entry.max?'matches':'does_not_match';}catch{}}
+   }
+  }
   checks.push({id:r.id,kind:r.kind,evidencePage:r.evidencePage,result});
  }
  return {status:checks.some(x=>x.result==='does_not_match')?'requirement_mismatch':checks.length&&checks.every(x=>x.result==='matches')?'listed_checks_match_not_full_eligibility':'review_required',checks};

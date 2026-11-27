@@ -36,12 +36,17 @@ jobs:
             assert.match(page.headers.get('x-robots-tag')||'',/noindex/i,route);
             assert.match(await page.text(),/globalGOV/,route);
           }
-          for(const route of ['/official.js','/lite.js','/release-preview.js','/full-app.js']){
+          for(const route of ['/official.js','/lite.js','/release-preview.js','/full-app.js','/reviewed.js']){
             new Function(await (await get(route)).text());
           }
           const main=await get('/');
           assert.match(main.headers.get('content-security-policy')||'',/script-src 'self';/);
           assert.match(main.headers.get('content-security-policy')||'',/script-src-attr 'none'/);
+          const reviewed=await (await get('/api/reviewed-recruitment')).json();
+          assert.equal(reviewed.publicLaunchAuthorized,false);
+          assert.equal(reviewed.state,'not_enrolled');
+          assert.deepEqual(reviewed.posts,[]);assert.deepEqual(reviewed.events,[]);
+          assert.equal((await fetch(base+'/api/reviewed-recruitment',{method:'POST',body:'{}'})).status,405);
           const all=await (await get('/api/notices?limit=50')).json();
           assert.equal(all.releaseProfile,'approved_staging');
           assert.equal(all.publicLaunchAuthorized,false);
