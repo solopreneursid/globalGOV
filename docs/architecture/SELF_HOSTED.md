@@ -101,6 +101,8 @@ No collector may bypass source restrictions. Where automated access or commercia
 
 ### Phase 2 — Data migration
 - Export complete snapshots from every relevant D1 database and any populated local SQLite ledger.
+- Use the existing `apps/govexam-radar/d1-export-backup.mjs` as an offline validation/encryption step for the canonical D1 SQL export. It validates the required 12-table set, imports the SQL into an isolated SQLite file in safe mode, checks SQLite integrity, and encrypts the export with AES-256-GCM. It does not connect to or export a live D1 database, and it does not import into PostgreSQL.
+- Build and verify the separate PostgreSQL importer against the exported schema before loading any records.
 - Import into PostgreSQL without deleting or mutating the source snapshots.
 - Compare table counts, primary-key coverage, duplicate constraints, and deterministic row-level checksums.
 - Preserve browser-local bookmarks through the existing export/import feature; they are not in server-side D1.
