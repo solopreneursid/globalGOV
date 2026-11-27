@@ -181,16 +181,26 @@ async function decryptToTemporaryFile(backupPath, key, directory) {
   return dumpPath;
 }
 
-export async function verifyPostgresBackup({ backupPath, key, pgRestoreCommand = "pg_restore" } = {}) {
+export async function decryptBackupForRestore({ backupPath, key } = {}) {
   assertKey(key);
   const directory = await mkdtemp(join(dirname(resolve(backupPath)), ".globalgov-restore-"));
   try {
     const dumpPath = await decryptToTemporaryFile(backupPath, key, directory);
-    const listing = runCommand(pgRestoreCommand, ["--list", dumpPath]);
+    return { directory, dumpPath };
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function verifyPostgresBackup({ backupPath, key, pgRestoreCommand = "pg_restore" } = {}) {
+  const restored = await decryptBackupForRestore({ backupPath, key });
+  try {
+    const listing = runCommand(pgRestoreCommand, ["--list", restored.dumpPath]);
     if (!listing.includes("TABLE DATA") && !listing.includes("TABLE")) throw new Error("postgres_archive_empty");
     return { verified: true, archiveEntries: listing.split("\n").filter(Boolean).length };
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await rm(restored.directory, { recursive: true, force: true });
   }
 }
 
