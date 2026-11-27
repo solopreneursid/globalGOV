@@ -36,7 +36,7 @@ function mockPool() {
         const table = sql.match(/FROM "([^"]+)"/)[1];
         return { rows: [{ count: String(tables.get(table)?.length ?? 0) }] };
       }
-      if (sql.startsWith("INSERT INTO "members"")) {
+      if (sql.startsWith('INSERT INTO "members"')) {
         const match = sql.match(/^INSERT INTO "members" \(([^)]+)\) VALUES /);
         const names = match[1].split(",").map(x => x.replaceAll('"', ""));
         const width = names.length;
