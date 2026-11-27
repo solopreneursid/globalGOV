@@ -7,6 +7,7 @@ export class MemoryCache {
     this.maxEntries = maxEntries;
     this.maxTtlMs = maxTtlSeconds * 1000;
     this.now = now;
+    this.sequence = 0;
     this.entries = new Map();
   }
 
@@ -24,7 +25,7 @@ export class MemoryCache {
       this.entries.delete(key);
       return undefined;
     }
-    entry.lastUsedAt = this.now();
+    entry.lastUsedAt = ++this.sequence;
     return entry.response.clone();
   }
 
@@ -53,7 +54,7 @@ export class MemoryCache {
     this.entries.set(key, {
       response: response.clone(),
       expiresAt: now + ttlSeconds * 1000,
-      lastUsedAt: now
+      lastUsedAt: ++this.sequence
     });
   }
 
