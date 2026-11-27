@@ -151,7 +151,17 @@ export function parseUsajobsHistoricPage(body,now=Date.now()){
 async function boundedJson(url,fetcher,limit){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
  try{
-  const response=await fetcher(url.toString(),{method:'GET',redirect:'error',signal:controller.signal,headers:{Accept:'application/json','User-Agent':'globalGOV/2.8 (+https://github.com/solopreneursid/globalGOV)'}});
+  const init={method:'GET',redirect:'manual',signal:controller.signal,headers:{Accept:'application/json'}};
+  let response=await fetcher(url.toString(),init);
+  if(response.status>=300&&response.status<400){
+   const location=response.headers.get('location');
+   if(!location)throw new UpstreamError('upstream_redirect_rejected',502);
+   let target;try{target=new URL(location,url);}catch{throw new UpstreamError('upstream_redirect_rejected',502);}
+   if(target.protocol!=='https:'||target.origin!==url.origin||target.pathname!==url.pathname||target.username||target.password||target.hash)
+    throw new UpstreamError('upstream_redirect_rejected',502);
+   response=await fetcher(target.toString(),init);
+   if(response.status>=300&&response.status<400)throw new UpstreamError('upstream_redirect_loop',502);
+  }
   if(response.status===429)throw new UpstreamError('upstream_rate_limited',503,response.headers.get('retry-after'));
   if(!response.ok)throw new UpstreamError('upstream_http_'+response.status,502);
   if(!(response.headers.get('content-type')||'').toLowerCase().includes('json'))throw new UpstreamError('upstream_content_type_invalid',502);
