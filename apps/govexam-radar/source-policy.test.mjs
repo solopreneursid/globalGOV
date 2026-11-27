@@ -41,7 +41,7 @@ test("founder policy review rejects host expansion and non-GET methods", async (
     permittedMethods: [{ method: "GET", path: "/advertisements/", contentType: "application/pdf" }],
     allowedHosts: ["recruitment.ssb.gov.in"],
     policyUrl: "https://recruitment.ssb.gov.in/websitepolicyUrl",
-    reviewerLabel: "founder", reviewerAt: 1000, reviewedAt: 1000, expiresAt: 5000
+    reviewerLabel: "founder", reviewedAt: 1000, expiresAt: 5000, notes: "Written approval recorded for test purposes."
   };
   await assert.rejects(recordSourcePolicyReview(pool, { ...base, allowedHosts: ["example.com"] }), /host_mismatch/);
   await assert.rejects(recordSourcePolicyReview(pool, {
