@@ -36,3 +36,20 @@ The public Worker includes a read-only reviewed recruitment API and integrated f
 
 ### Expanded extraction and eligibility
 Hindi-labelled fields, explicit Hindi table headers and Devanagari digits are supported in bounded recognised layouts. No general OCR or translation-based inference. Reviewed experience, citizenship (including explicit exception review), and conjunctive qualification groups are evaluated only when the stated rule definition, cutoff and applicant input are supplied. Missing inputs remain unknown; no applicant profile is stored. Complex or category-specific rules still require individual review.
+
+## Owner-controlled D1 export and isolated restore
+The new `d1-export-backup.mjs` preserves the exact SQL dump in a separate AES-256-GCM authenticated format. It validates the complete globalGOV application-table inventory, SQLite integrity and foreign keys in a temporary isolated database, then verifies encrypted readback. It refuses public-readable input and output directories and overwrites. Use SQLite CLI safe mode on an unprivileged, encrypted owner-controlled machine; do not execute dumps from unknown sources. Cloudflare's export operation can temporarily block database requests, so schedule a maintenance window. Export the full schema and data using the official D1 dashboard/API; see https://developers.cloudflare.com/d1/best-practices/import-export-data/. Do not export into this public Git repository, Actions, chat, or an unencrypted workstation. The existing D1 includes community data.
+
+```sh
+# On an owner-controlled machine, set GLOBALGOV_BACKUP_KEY_HEX privately first.
+# Both input and destination must be private (0600 file, 0700 directory).
+node d1-export-backup.mjs encrypt /private/globalgov.sql /independent-private/globalgov-2026-11-27.enc
+node d1-export-backup.mjs verify /independent-private/globalgov-2026-11-27.enc
+```
+
+Keep the secret separately from ciphertext, keep two independent encrypted copies, and record aggregate verification evidence only. This procedure does not overwrite live D1 or provision any storage. Actual owner-controlled D1 export and independent restore remain required. A local integrity test is not a live-cloud restore certification. Category age ranges are explicitly reviewed and never stacked by inference; the matching code and applicant facts must be confirmed. No real category data is stored or published.
+
+### Owner-side signing
+The `review-sign.mjs` helper validates and signs a manually prepared byte-exact review payload using an existing owner-controlled Ed25519 private key. It requires `GLOBALGOV_REVIEW_APPROVED=YES`, private input and output permissions, and the explicit SDSC source scope. It writes only the signed configuration for separate founder-approved enrollment. It does not enroll the public key, turn on the source or assert legal/statutory approval. An empty or synthetic test bundle is never a production approval. Never share the private signing key with ChatGPT, GitHub or Cloudflare.
+
+The signing CLI rejects unknown root, post, event and evidence keys to prevent incidental applicant or reviewer metadata entering a source-controlled payload. Review free-text fields for personal information as well. The SQLite subprocess receives a restricted environment and does not inherit backup or cloud credentials.

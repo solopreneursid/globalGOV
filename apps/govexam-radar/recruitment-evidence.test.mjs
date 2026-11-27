@@ -59,3 +59,14 @@ test('additional reviewed eligibility constraints preserve unknowns and all-of q
  assert.equal(screenReviewedRequirements(rules,{...profile,citizenshipCodes:['GB'],qualificationCodes:['BTECH']}).status,'review_required');
  assert.equal(screenReviewedRequirements(rules,{...profile,citizenshipCodes:['GB'],citizenshipComplete:true}).status,'requirement_mismatch');
 });
+
+test('explicit reviewed category ranges never infer or stack age relaxations',()=>{
+ const rule={id:'category_age',kind:'age_category',cutoff:'2026-11-09',relaxationsReviewed:true,categorySpecific:true,combinationsReviewed:true,ranges:[{code:'GENERAL',min:18,max:30},{code:'EXAMPLE_RELAXED',min:18,max:35}],evidencePage:4};
+ const rules={reviewState:'founder_reviewed',requirements:[rule]};
+ const p={dateOfBirth:'1993-01-01',reviewedCategoryCode:'EXAMPLE_RELAXED',categoryFactsConfirmed:true};
+ assert.equal(screenReviewedRequirements(rules,p).status,'listed_checks_match_not_full_eligibility');
+ assert.equal(screenReviewedRequirements(rules,{...p,reviewedCategoryCode:'GENERAL'}).status,'requirement_mismatch');
+ assert.equal(screenReviewedRequirements(rules,{...p,reviewedCategoryCode:'UNKNOWN'}).status,'review_required');
+ assert.equal(screenReviewedRequirements(rules,{...p,categoryFactsConfirmed:false}).status,'review_required');
+ assert.equal(screenReviewedRequirements({...rules,requirements:[{...rule,combinationsReviewed:false}]},p).status,'review_required');
+});
