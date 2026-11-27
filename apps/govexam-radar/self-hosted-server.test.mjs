@@ -58,3 +58,14 @@ test("rejects protocol-relative request targets and invalid public origins", asy
   const db = { prepare: () => ({ bind: () => ({ first: async () => ({ version: "001_core" }) }) }) };
   assert.throws(() => createNodeServer({ db, publicOrigin: "https://user:pass@example.test" }), /invalid_public_origin/);
 });
+
+test("runtime environment passes the PostgreSQL source-policy registry fail-closed",()=>{
+ const db={};
+ const pool={query(){}};
+ const runtime=createRuntimeEnvironment({db,pool,env:{REQUIRE_SOURCE_POLICY_REGISTRY:"true"}});
+ assert.equal(runtime.DB,db);
+ assert.equal(runtime.SOURCE_POLICY_POOL,pool);
+ assert.equal(runtime.REQUIRE_SOURCE_POLICY_REGISTRY,"true");
+ const disabled=createRuntimeEnvironment({db,pool,env:{}});
+ assert.equal(disabled.REQUIRE_SOURCE_POLICY_REGISTRY,"false");
+});
