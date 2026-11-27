@@ -106,6 +106,14 @@ export async function runPostgresRestoreTest({
     await testPool.end();
     testPool = null;
 
+    // A restore is not recorded as successful until the temporary database is
+    // explicitly dropped and the decrypted archive workspace is removed.
+    await maintenancePool.query('DROP DATABASE "' + database + '" WITH (FORCE)');
+    created = false;
+    await maintenancePool.end();
+    maintenancePool = null;
+    await rm(restored.directory, { recursive: true, force: true });
+
     const verifiedAt = now();
     const update = await pool.query(
       "UPDATE backup_runs SET restore_verified_at=$1,document_restore_verified_at=$1 " +
