@@ -56,7 +56,7 @@ test("connector inventory exposes all 58 portals and keeps SSB automated access 
  const response=await worker.fetch(new Request("https://test.invalid/api/source-connectors"));
  assert.equal(response.status,200);
  const body=await response.json();
- assert.equal(body.total,58);
+ assert.equal(body.total,60);
  const ssb=body.sources.find(x=>x.url.includes("recruitment.ssb.gov.in"));
  assert.ok(ssb);
  assert.equal(ssb.automatedCollectionEnabled,false);
