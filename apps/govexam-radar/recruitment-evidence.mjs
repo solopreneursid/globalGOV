@@ -16,16 +16,16 @@ const MAX_TEXT=2*1024*1024;
 const labels={
  advertisement:/^(?:advertisement|advt\.?|advertisement reference)\s*(?:no\.?|number|reference)\s*[:.-]?\s+(.+)$/i,
  authority:/^(?:recruitment authority|issuing authority|employer)\s*:\s*(.+)$/i,
- post:/^(?:name of (?:the )?post|post name|post)\s*:\s*(.+)$/i,
- vacancies:/^(?:number of (?:posts|vacancies)|total vacancies|vacancies)\s*:\s*(.+)$/i,
- qualification:/^(?:essential (?:educational )?qualifications?|educational qualifications?|qualification)\s*:\s*(.+)$/i,
- age:/^(?:age limit|age limits|age requirement)\s*:\s*(.+)$/i,
- ageCutoff:/^(?:age as on|age reckoned as on|eligibility cutoff date)\s*:\s*(.+)$/i,
- fee:/^(?:application fee|examination fee|fee)\s*:\s*(.+)$/i,
- salary:/^(?:pay scale|pay level|salary|pay matrix)\s*:\s*(.+)$/i,
- opening:/^(?:application opening date|opening date|registration starts on|starting date for online registration)\s*[:.-]?\s+(.+)$/i,
- closing:/^(?:application closing date|closing date|registration closes on|last date(?: for (?:submission of )?(?:online )?applications?)?)\s*[:.-]?\s+(.+)$/i,
- examDate:/^(?:exam(?:ination)? date|written test date|date of examination)\s*:\s*(.+)$/i
+ post:/^(?:name of (?:the )?post|post name|post|पद का नाम)\s*:\s*(.+)$/i,
+ vacancies:/^(?:number of (?:posts|vacancies)|total vacancies|vacancies|कुल रिक्तियाँ|कुल रिक्तियां)\s*:\s*(.+)$/i,
+ qualification:/^(?:essential (?:educational )?qualifications?|educational qualifications?|qualification|शैक्षणिक योग्यता)\s*:\s*(.+)$/i,
+ age:/^(?:age limit|age limits|age requirement|आयु सीमा)\s*:\s*(.+)$/i,
+ ageCutoff:/^(?:age as on|age reckoned as on|eligibility cutoff date|आयु गणना की तिथि)\s*:\s*(.+)$/i,
+ fee:/^(?:application fee|examination fee|fee|आवेदन शुल्क)\s*:\s*(.+)$/i,
+ salary:/^(?:pay scale|pay level|salary|pay matrix|वेतनमान)\s*:\s*(.+)$/i,
+ opening:/^(?:application opening date|opening date|registration starts on|starting date for online registration|आवेदन की प्रारंभिक तिथि)\s*[:.-]?\s+(.+)$/i,
+ closing:/^(?:application closing date|closing date|registration closes on|last date(?: for (?:submission of )?(?:online )?applications?)?|आवेदन की अंतिम तिथि)\s*[:.-]?\s+(.+)$/i,
+ examDate:/^(?:exam(?:ination)? date|written test date|date of examination|परीक्षा की तिथि)\s*:\s*(.+)$/i
 };
 const eventPatterns=[
  ['corrigendum',/^(?:corrigendum|addendum)\b/i],
@@ -37,7 +37,7 @@ const eventPatterns=[
 ];
 export function indiaCalendarDate(raw){
  if(typeof raw!=='string')return null;
- const m=/^(\d{1,2})[./-](\d{1,2})[./-](20\d{2})(?:\s*\((\d{2}):(\d{2})\s*(?:hrs\.?)?\))?$/i.exec(raw.trim());
+ const m=/^(\d{1,2})[./-](\d{1,2})[./-](20\d{2})(?:\s*\((\d{2}):(\d{2})\s*(?:hrs\.?)?\))?$/i.exec(raw.trim().replace(/[०-९]/g,c=>String(c.codePointAt(0)-0x966)));
  if(!m)return null;
  const [d,month,y]=m.slice(1,4).map(Number),dt=new Date(Date.UTC(y,month-1,d));
  if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==month-1||dt.getUTCDate()!==d)return null;
@@ -60,7 +60,7 @@ export function extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes,tex
    for(const [key,regex] of Object.entries(labels)){
     const match=regex.exec(line)||(key==='advertisement'?/^(?:No\.\s*)?(SDSC SHAR\/RMT\/\d{2}\/20\d{2})\s*$/i.exec(line):null);if(!match)continue;
     const raw=match[1].trim();if(!raw||raw.length>500)continue;
-    const value=['opening','closing','examDate','ageCutoff'].includes(key)?indiaCalendarDate(raw):key==='vacancies'?(/^[1-9]\d{0,5}$/.test(raw)?Number(raw):null):raw;
+    const value=['opening','closing','examDate','ageCutoff'].includes(key)?indiaCalendarDate(raw):key==='vacancies'?(/^[1-9]\d{0,5}$/.test(raw.replace(/[०-९]/g,c=>String(c.codePointAt(0)-0x966)))?Number(raw.replace(/[०-९]/g,c=>String(c.codePointAt(0)-0x966))):null):raw;
     (candidates[key]??=[]).push({value,raw,page:pi+1,line:li+1});
    }
    // SDSC SHAR official reopening notice: an explicitly stated replacement
