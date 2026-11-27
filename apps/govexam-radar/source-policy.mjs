@@ -99,6 +99,19 @@ export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) 
   return { total: sources.length, inserted, preservedExistingReviews: sources.length - inserted };
 }
 
+export function sourcePolicyAllowsUrl(policy, rawUrl) {
+  if (!policy || policy.automatedCollectionEnabled !== true ||
+      typeof policy.host !== "string" || !Array.isArray(policy.allowedPaths)) return false;
+  try {
+    const target = new URL(rawUrl);
+    if (target.protocol !== "https:" || target.hostname.toLowerCase() !== policy.host ||
+        target.username || target.password || target.port || target.hash) return false;
+    return policy.allowedPaths.some(path =>
+      validPolicyPath(path) &&
+      (target.pathname === path || (path.endsWith("/") && target.pathname.startsWith(path))));
+  } catch { return false; }
+}
+
 export async function getApprovedSourcePolicy(pool, source, now = Date.now()) {
   if (!pool || typeof pool.query !== "function" || !source?.id || !source?.url) {
     throw new Error("source_policy_lookup_inputs_invalid");
