@@ -92,12 +92,13 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
   const adminUser = env.POSTGRES_USER || env.PGUSER || "";
   const appUser = env.APP_DB_USER || "";
   const backupUser = env.BACKUP_DB_USER || "";
-  if (!adminUser || !appUser || !backupUser) return { status: "skipped", reason: "runtime_roles_not_configured" };
+  const restoreUser = env.RESTORE_TEST_DB_USER || "";
+  if (!adminUser || !appUser || !backupUser || !restoreUser) return { status: "skipped", reason: "runtime_roles_not_configured" };
   if (!env.PGDATABASE) throw new Error("postgres_runtime_database_name_required");
   const valid = /^[A-Za-z_][A-Za-z0-9_]*$/;
   const database = env.PGDATABASE || "";
-  if (![adminUser, appUser, backupUser, database].every(name => valid.test(name)) ||
-      new Set([adminUser, appUser, backupUser]).size !== 3) {
+  if (![adminUser, appUser, backupUser, restoreUser, database, "postgres"].every(name => valid.test(name)) ||
+      new Set([adminUser, appUser, backupUser, restoreUser]).size !== 4) {
     throw new Error("postgres_runtime_role_name_invalid");
   }
   const quote = name => '"' + name + '"';
@@ -112,7 +113,8 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
     " IN SCHEMA public GRANT USAGE,SELECT,UPDATE ON SEQUENCES TO " + quote(appUser));
   await pool.query("GRANT pg_read_all_data TO " + quote(backupUser));
   await pool.query("GRANT SELECT,INSERT,UPDATE ON TABLE backup_runs TO " + quote(backupUser));
-  return { status: "applied", appRole: appUser, backupRole: backupUser };
+  await pool.query("GRANT CONNECT ON DATABASE " + quote("postgres") + " TO " + quote(restoreUser));
+  return { status: "applied", appRole: appUser, backupRole: backupUser, restoreTestRole: restoreUser };
 }
 
 async function main() {
