@@ -42,5 +42,28 @@ export function parseSsbTable(html,now=Date.now()){
  if(valid.length>200)throw Error('ssb_open_row_limit');
  return {valid,recognized:rows.length,received:rows.length,rejected};
 }
-export const ingestSsb=(db,fetcher=fetch,now=Date.now())=>ingestIndianSnapshot(SSB_SOURCE,parseSsbTable,db,fetcher,now);
-export const ssbPublicationGate=(db,now=Date.now())=>indianSnapshotGate(SSB_SOURCE.id,db,now);
+export async function ingestSsb(db,fetcher=fetch,now=Date.now(),options={}) {
+ const policy=options.sourcePolicy||SSB_SOURCE;
+ if(policy.automatedAccessStatus!=='approved'||options.automatedAccessApproved!==true){
+  if(!db)throw Error('database_binding_required');
+  const id=crypto.randomUUID(),details=JSON.stringify({
+   origin:'scheduled',snapshot:'blocked',policyStatus:policy.automatedAccessStatus||'not_assessed',
+   reason:'Automated access is not approved; no HTTP request was made.'
+  });
+  const result={id,sourceId:SSB_SOURCE.id,startedAt:now,finishedAt:Date.now(),state:'error',
+   httpStatus:null,received:0,accepted:0,discarded:0,errorCode:'automated_access_not_approved'};
+  try{
+   await db.prepare('INSERT INTO source_ingest_runs(id,source_id,started_at,finished_at,state,http_status,received,accepted,discarded,error_code,details) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(id,SSB_SOURCE.id,result.startedAt,result.finishedAt,'error',null,0,0,0,result.errorCode,details).run();
+  }catch(error){
+   result.errorCode='audit_write_failed';
+   console.error(JSON.stringify({event:'ssb_policy_block_audit_failed',reason:String(error?.message||error)}));
+  }
+  return result;
+ }
+ return ingestIndianSnapshot(policy,parseSsbTable,db,fetcher,now);
+}
+export async function ssbPublicationGate(db,now=Date.now(),policy=SSB_SOURCE) {
+ if(policy.automatedAccessStatus!=='approved')return {ready:false,reason:'automated_access_unconfirmed'};
+ return indianSnapshotGate(SSB_SOURCE.id,db,now);
+}
