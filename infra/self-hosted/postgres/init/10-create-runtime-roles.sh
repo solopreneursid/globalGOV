@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+#!/bin/sh
+set -eu
 
 : "${POSTGRES_USER:?POSTGRES_USER must name the database owner}"
 : "${POSTGRES_DB:?POSTGRES_DB must be set}"
