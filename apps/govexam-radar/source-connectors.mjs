@@ -138,7 +138,7 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
     const key = line.slice(0, separator).trim().toLowerCase();
     const value = line.slice(separator + 1).trim();
     if (key === "user-agent") {
-      if (!value || !/^(?:\\*|[a-z0-9_-]+)$/i.test(value)) {
+      if (!value || !/^(?:\*|[a-z0-9_-]+)$/i.test(value)) {
         throw new Error("robots_user_agent_syntax_unconfirmed");
       }
       if (!group || group.hasRules) {
