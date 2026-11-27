@@ -108,7 +108,7 @@ export async function inspectSelfHostedHealth({
 
   try {
     const result = await pool.query(
-      "SELECT finished_at,state,archive_verified_at,document_archive_verified_at,restore_verified_at,document_restore_verified_at,error_code FROM backup_runs WHERE state='ok' ORDER BY finished_at DESC LIMIT 1"
+      "SELECT finished_at,state,archive_verified_at,document_archive_verified_at,error_code FROM backup_runs WHERE state='ok' ORDER BY finished_at DESC LIMIT 1"
     );
     const latest = result.rows[0];
     if (!latest) {
@@ -125,21 +125,28 @@ export async function inspectSelfHostedHealth({
       checks.push(issue("backup", "critical", "backup_stale", {
         lastBackupAt: Number(latest.finished_at)
       }));
-    } else if (!latest.restore_verified_at || !latest.document_restore_verified_at) {
-      checks.push(issue("backup", "warning", "full_restore_test_missing_or_stale", {
-        lastBackupAt: Number(latest.finished_at),
-        lastRestoreTestAt: latest.restore_verified_at ? Number(latest.restore_verified_at) : null,
-        documentRestoreTestAt: latest.document_restore_verified_at ? Number(latest.document_restore_verified_at) : null
-      }));
-    } else if (timestamp - Number(latest.restore_verified_at) > 30 * 86400000 ||
-               timestamp - Number(latest.document_restore_verified_at) > 30 * 86400000) {
-      checks.push(issue("backup", "warning", "full_restore_test_missing_or_stale", {
-        lastRestoreTestAt: Number(latest.restore_verified_at),
-        documentRestoreTestAt: Number(latest.document_restore_verified_at)
-      }));
     }
   } catch {
     checks.push(issue("backup", "critical", "backup_ledger_unavailable"));
+  }
+
+  try {
+    const restore = await pool.query(
+      "SELECT MAX(restore_verified_at) AS db_restore_at,MAX(document_restore_verified_at) AS document_restore_at FROM backup_runs WHERE state='ok'"
+    );
+    const row = restore.rows[0] || {};
+    const dbRestoreAt = row.db_restore_at === null || row.db_restore_at === undefined ? null : Number(row.db_restore_at);
+    const documentRestoreAt = row.document_restore_at === null || row.document_restore_at === undefined
+      ? null : Number(row.document_restore_at);
+    if (!dbRestoreAt || !documentRestoreAt ||
+        timestamp - dbRestoreAt > 30 * 86400000 ||
+        timestamp - documentRestoreAt > 30 * 86400000) {
+      checks.push(issue("backup", "warning", "full_restore_test_missing_or_stale", {
+        lastRestoreTestAt: dbRestoreAt, documentRestoreTestAt: documentRestoreAt
+      }));
+    }
+  } catch {
+    checks.push(issue("backup", "warning", "restore_test_ledger_unavailable"));
   }
 
   try {
