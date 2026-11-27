@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'apps/govexam-radar/usajobs-history.mjs'
+      - 'apps/govexam-radar/usajobs-history-ui.mjs'
       - 'apps/govexam-radar/usajobs-history-live-smoke.mjs'
       - '.github/workflows/globalgov-usajobs-history-live-smoke.yml'
   workflow_dispatch:

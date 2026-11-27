@@ -25,7 +25,7 @@ assert.ok(data.nextCursor===null||typeof data.nextCursor==='string');
 const html=await fetch(base+'/usajobs-history',{redirect:'error',signal:AbortSignal.timeout(15000)});
 assert.equal(html.status,200);assert.match(await html.text(),/Past USAJOBS announcements/);assert.match(html.headers.get('x-robots-tag')||'',/noindex/i);
 const js=await fetch(base+'/usajobs-history.js',{redirect:'error',signal:AbortSignal.timeout(15000)});
-assert.equal(js.status,200);assert.match(await js.text(),/api\/usajobs\/announcement-text/);
+assert.equal(js.status,200);const archiveScript=await js.text();assert.match(archiveScript,/announcement-text/);assert.match(archiveScript,/state\.pageStarts/);assert.match(archiveScript,/Load next data page/);
 let detail='skipped_no_records';
 if(data.records.length){
  const control=data.records[0].controlNumber;
