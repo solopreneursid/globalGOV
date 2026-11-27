@@ -126,7 +126,7 @@ test("robots disallow rules are decoded as text and prevent target requests",asy
     source,minIntervalMs:0,
     fetcher:async input=>{
       if(String(input).endsWith("/robots.txt")) {
-        return new Response("User-agent: *\\nDisallow: /",{headers:{"content-type":"text/plain"}});
+        return new Response("User-agent: *\nDisallow: /",{headers:{"content-type":"text/plain"}});
       }
       targetRequested=true;
       return new Response("<html>not allowed</html>",{headers:{"content-type":"text/html"}});
