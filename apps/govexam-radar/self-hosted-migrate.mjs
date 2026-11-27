@@ -122,7 +122,14 @@ async function main() {
   try {
     const results = await applyMigrations(pool, migrations);
     const roleGrants = await applyRuntimeRoleGrants(pool, process.env);
-    console.log(JSON.stringify({ status: "ok", directory: String(directory), migrations: results, roleGrants }));
+    const [{ SOURCES }, { seedSourcePolicyRegistry }] = await Promise.all([
+      import("./worker.js"), import("./source-policy.mjs")
+    ]);
+    const sourcePolicies = await seedSourcePolicyRegistry(pool, SOURCES);
+    console.log(JSON.stringify({
+      status: "ok", directory: String(directory), migrations: results,
+      roleGrants, sourcePolicies
+    }));
   } finally {
     await pool.end();
   }
