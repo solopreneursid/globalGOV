@@ -17,6 +17,8 @@ test("policy seed preserves explicit founder reviews and does not infer SSB auto
   assert.equal(result.inserted, 1);
   assert.equal(calls[0].values[1], "clarification_required");
   assert.equal(calls[0].values[2], "conditional");
+  assert.equal(calls[0].values[6], null);
+  assert.equal(calls[0].values[7], "repository-policy-seed");
 });
 
 test("approved policy requires a reviewed, unexpired GET path on the registered official host", async () => {
@@ -25,7 +27,8 @@ test("approved policy requires a reviewed, unexpired GET path on the registered 
       automated_access_status: "approved", reuse_status: "conditional",
       permitted_methods: [{ method: "GET", path: "/advertisements/", contentType: "application/pdf" }],
       allowed_hosts: ["recruitment.ssb.gov.in"], policy_url: "https://recruitment.ssb.gov.in/websitepolicyUrl",
-      reviewed_at: 1000, expires_at: 5000, reviewer_label: "founder"
+      reviewed_at: 1000, expires_at: 5000, reviewer_label: "founder",
+      notes: "Reviewed the official policy and source access requirements."
     }] };
   } };
   const policy = await getApprovedSourcePolicy(pool, source, 2000);
@@ -44,6 +47,7 @@ test("founder policy review rejects host expansion and non-GET methods", async (
     reviewerLabel: "founder", reviewedAt: 1000, expiresAt: 5000, notes: "Written approval recorded for test purposes."
   };
   await assert.rejects(recordSourcePolicyReview(pool, { ...base, allowedHosts: ["example.com"] }), /host_mismatch/);
+  await assert.rejects(recordSourcePolicyReview(pool, { ...base, allowedHosts: ["recruitment.ssb.gov.in", "example.com"] }), /host_mismatch/);
   await assert.rejects(recordSourcePolicyReview(pool, {
     ...base, permittedMethods: [{ method: "POST", path: "/", contentType: "application/pdf" }]
   }), /method_invalid/);
@@ -57,4 +61,17 @@ test("approved source policy requires a cited policy and expiry", async () => {
     allowedHosts: ["recruitment.ssb.gov.in"], reviewerLabel: "founder",
     reviewedAt: 1000, expiresAt: 5000, notes: "Approved by email"
   }), /requires_evidence_expiry/);
+});
+
+test("repository policy seeds never satisfy the explicit approval gate", async () => {
+  const pool = { async query() {
+    return { rows: [{
+      automated_access_status: "approved", reuse_status: "conditional",
+      permitted_methods: [{ method: "GET", path: "/advertisements/", contentType: "application/pdf" }],
+      allowed_hosts: ["recruitment.ssb.gov.in"], policy_url: "https://recruitment.ssb.gov.in/websitepolicyUrl",
+      reviewed_at: null, expires_at: null, reviewer_label: "repository-policy-seed",
+      notes: "This seed is not independent legal approval."
+    }] };
+  } };
+  assert.equal(await getApprovedSourcePolicy(pool, source, Date.now()), null);
 });
