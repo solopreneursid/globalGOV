@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  seedSourcePolicyRegistry, getApprovedSourcePolicy, recordSourcePolicyReview, sourcePolicyAllowsUrl
+  mergeSourcePolicySources, seedSourcePolicyRegistry, getApprovedSourcePolicy, recordSourcePolicyReview, sourcePolicyAllowsUrl
 } from "./source-policy.mjs";
 
 const source = { id: "ssb", url: "https://recruitment.ssb.gov.in/" };
@@ -86,4 +86,13 @@ test("approved policy paths are exact, host-bound HTTPS GET targets", () => {
   assert.equal(sourcePolicyAllowsUrl(policy, "https://teaching-vacancies.service.gov.uk/api/v1/private.json"), false);
   assert.equal(sourcePolicyAllowsUrl(policy, "https://evil.example/api/v1/jobs.json"), false);
   assert.equal(sourcePolicyAllowsUrl(policy, "http://teaching-vacancies.service.gov.uk/api/v1/jobs.json"), false);
+});
+
+test("source policy seed merges directory and connector-specific official endpoints by source ID", () => {
+  const merged = mergeSourcePolicySources(
+    [{ id: "uk-dfe-teaching-vacancies", name: "DfE", url: "https://teaching-vacancies.service.gov.uk/jobs" }],
+    [{ id: "uk-dfe-teaching-vacancies", api: "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json" }]
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].url, "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json");
 });
