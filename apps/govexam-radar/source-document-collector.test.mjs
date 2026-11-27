@@ -33,10 +33,11 @@ test("manual evidence intake archives an official-host PDF and queues human revi
     });
     assert.equal(result.publicationAuthorized, false);
     assert.equal(result.review.reviewState, "pending");
-    assert.equal(pool.calls.length, 4);
+    assert.equal(pool.calls.length, 5);
     assert.match(pool.calls[1].sql, /source_documents/);
     assert.match(pool.calls[2].sql, /manual_review_queue/);
-    assert.equal(pool.calls[3].sql, "COMMIT");
+    assert.match(pool.calls[3].sql, /source_connector_runs/);
+    assert.equal(pool.calls[4].sql, "COMMIT");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
