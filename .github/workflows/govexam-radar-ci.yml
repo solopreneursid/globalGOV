@@ -21,6 +21,9 @@ on:
       - 'docs/architecture/**'
       - 'README.md'
       - 'MIGRATION.md'
+      - 'Dockerfile.backup'
+      - 'compose.yaml'
+      - 'backup.env.example'
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -211,6 +214,11 @@ jobs:
           docker exec -i globalgov-schema-test \
             psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
             < infra/self-hosted/postgres/001_core.test.sql
+      - name: Apply first-party operations and evidence schema
+        run: |
+          docker exec -i globalgov-schema-test \
+            psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
+            < infra/self-hosted/postgres/002_first_party_operations.sql
       - name: Install locked PostgreSQL driver
         working-directory: apps/govexam-radar
         run: npm ci --no-audit --no-fund
