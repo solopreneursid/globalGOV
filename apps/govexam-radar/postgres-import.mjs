@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile, lstat, rm } from "node:fs/promises";
+import { mkdtemp, readFile, lstat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -180,6 +180,9 @@ export async function importD1Snapshot({
   if (mode === "apply" &&
       (allowWrite !== true || !expectedDatabase || confirmDatabase !== expectedDatabase)) {
     throw new Error("d1_import_write_confirmation_required");
+  }
+  if (mode === "apply" && pool.options?.database && pool.options.database !== expectedDatabase) {
+    throw new Error("d1_import_target_database_mismatch");
   }
   if (tables.some(table => !REQUIRED_IMPORT_TABLES.includes(table)) ||
       new Set(tables).size !== tables.length) {
