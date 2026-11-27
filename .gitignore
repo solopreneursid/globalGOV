@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.backup.example
 node_modules/
 **/node_modules/
 *.sqlite
