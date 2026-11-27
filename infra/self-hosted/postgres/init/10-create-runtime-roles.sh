@@ -18,6 +18,7 @@ psql --no-psqlrc --set=ON_ERROR_STOP=1 \
   --set=backup_password="$BACKUP_DB_PASSWORD" <<'SQL'
 CREATE ROLE :"app_user" LOGIN PASSWORD :'app_password';
 CREATE ROLE :"backup_user" LOGIN PASSWORD :'backup_password';
+ALTER ROLE :"backup_user" CREATEDB;
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db_name" TO :"app_user", :"backup_user";
