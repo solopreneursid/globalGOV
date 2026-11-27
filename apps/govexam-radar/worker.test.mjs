@@ -120,3 +120,36 @@ test("USAJOBS historic archive is separate, noindexed and uses first-party asset
  const lite=await request("/lite");assert.match(await lite.text(),/Past USAJOBS announcements/);
  const spec=await (await request("/openapi.json")).json();assert.ok(spec.paths["/api/usajobs/history"]);assert.ok(spec.paths["/api/usajobs/announcement-text"]);
 });
+
+test("self-hosted scheduled collection fails closed without an expiring source-policy review", async () => {
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async run() {
+              writes.push({ sql, values });
+              return { meta: { changes: 1 } };
+            },
+            async first() { return null; },
+            async all() { return { results: [] }; }
+          };
+        }
+      };
+    }
+  };
+  const pool = { async query() { return { rows: [] }; } };
+  let pending;
+  worker.scheduled(
+    { cron: "20 */3 * * *", scheduledTime: Date.parse("2026-11-27T00:20:00Z") },
+    { DB: db, SOURCE_POLICY_POOL: pool, REQUIRE_SOURCE_POLICY_REGISTRY: "true" },
+    { waitUntil(promise) { pending = promise; } }
+  );
+  await pending;
+  const block = writes.find(write => write.sql.includes("INSERT INTO source_connector_runs"));
+  assert.ok(block);
+  assert.equal(block.values[1], "uk-dfe-teaching-vacancies");
+  assert.equal(block.values[4], "blocked");
+  assert.equal(block.values[14], "source_policy_review_required");
+});
