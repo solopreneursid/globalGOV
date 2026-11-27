@@ -48,13 +48,6 @@ export function createBackupScheduler({
         logger.info?.(JSON.stringify({ event: "daily_backup_complete", runId, state: result?.state || "unknown" }));
         return result;
       } catch (error) {
-            logger.error?.(JSON.stringify({ event: "monthly_restore_test_failed",
-              errorCode: String(error?.message || "restore_test_failed").slice(0, 100) }));
-            restore = { state: "error" };
-          }
-        }
-        return { ...result, restoreTest: restore };
-      } catch (error) {
         lastAttemptedSlot = null;
         logger.error?.(JSON.stringify({ event: "daily_backup_failed", runId,
           errorCode: String(error?.message || "backup_failed").slice(0, 100) }));
