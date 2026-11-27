@@ -66,6 +66,40 @@ export function openBackupBytes(envelope, key) {
   return Buffer.concat([decipher.update(envelope.subarray(start + 12, envelope.length - TAG_BYTES)), decipher.final()]);
 }
 
+export async function encryptReadableToFile({ readable, key, outputPath } = {}) {
+  assertKey(key);
+  if (!readable || typeof outputPath !== "string" || !outputPath) throw new Error("backup_stream_inputs_invalid");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(MAGIC);
+  const prefix = Buffer.concat([MAGIC, iv]);
+  const digest = createHash("sha256");
+  digest.update(prefix);
+  const output = createWriteStream(outputPath, { flags: "wx", mode: 0o600 });
+  output.write(prefix);
+  const hashing = new Transform({
+    transform(chunk, encoding, callback) {
+      digest.update(chunk);
+      callback(null, chunk);
+    }
+  });
+  try {
+    await pipeline(readable, cipher, hashing, output);
+    const tag = cipher.getAuthTag();
+    await appendFile(outputPath, tag, { mode: 0o600 });
+    digest.update(tag);
+    await chmod(outputPath, 0o600);
+    const info = await lstat(outputPath);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BACKUP_BYTES) {
+      throw new Error("backup_output_invalid");
+    }
+    return { bytes: info.size, sha256: digest.digest("hex") };
+  } catch {
+    await unlink(outputPath).catch(() => {});
+    throw new Error("backup_stream_encryption_failed");
+  }
+}
+
 function pgDumpConfiguration(env) {
   const database = env.PGDATABASE || "";
   const user = env.PGUSER || "";
