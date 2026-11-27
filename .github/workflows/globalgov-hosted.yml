@@ -40,7 +40,7 @@ jobs:
           const all=await (await get('/api/notices?limit=50')).json();
           assert.equal(all.releaseProfile,'approved_staging');
           assert.equal(all.publicLaunchAuthorized,false);
-          const allowed=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities']);
+          const allowed=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities','india-ssb-recruitment']);
           assert.ok(Array.isArray(all.notices));
           assert.ok(all.notices.every(n=>allowed.has(n.sourceId)));
           assert.ok(all.sources.every(s=>allowed.has(s.id)&&s.commercialReuseApprovedForCurrentFields===true));

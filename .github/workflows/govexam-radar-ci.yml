@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: '22'
       - name: Unit and API tests
-        run: node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs
+        run: node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs ssb-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs
       - name: Install browser test runtime
         run: |
           npm install --no-save playwright@1.56.1
@@ -92,12 +92,12 @@ jobs:
           const responses=await Promise.all(paths.map(path=>fetch(origin+path,{cache:'no-store'})));
           if(responses.some((r,i)=>r.status!==(i===3?403:200)))throw Error('unexpected status');
           const [all,india,australia,deny,changes,status]=await Promise.all(responses.slice(0,6).map(x=>x.json()));
-          const permitted=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities']);
+          const permitted=new Set(['uk-dfe-teaching-vacancies','india-isro-opportunities','india-ssb-recruitment']);
           for(const x of [all,india,australia]){
             if(x.releaseProfile!=='approved_staging'||x.publicLaunchAuthorized!==false||!Array.isArray(x.sources)||!x.sources.some(s=>s.id==='uk-dfe-teaching-vacancies')||x.sources.some(s=>!permitted.has(s.id)||s.commercialReuseApprovedForCurrentFields!==true)||x.notices.some(n=>!permitted.has(n.sourceId))||typeof x.indiaSourceCheck?.ready!=='boolean')throw Error('unapproved source returned');
             if(!x.indiaSourceCheck.ready&&(x.sources.some(s=>s.id==='india-isro-opportunities')||x.notices.some(n=>n.sourceId==='india-isro-opportunities')))throw Error('unchecked ISRO data exposed');
           }
-          if(india.filters.country!=='India'||india.notices.some(n=>n.sourceId!=='india-isro-opportunities')||australia.total!==0||deny.error!=='source_not_approved_for_release_preview')throw Error('location or source filter failed');
+          if(india.filters.country!=='India'||india.notices.some(n=>!['india-isro-opportunities','india-ssb-recruitment'].includes(n.sourceId))||australia.total!==0||deny.error!=='source_not_approved_for_release_preview')throw Error('location or source filter failed');
           if(changes.changes.some(x=>!permitted.has(x.sourceId))||status.bySource.some(x=>!permitted.has(x.sourceId)))throw Error('secondary feed leaked a source');
           const privacy=await responses[6].text(),terms=await responses[7].text();
           if(!privacy.includes('connect@yorphives.com')||!terms.includes('Open Government Licence'))throw Error('policies missing');
