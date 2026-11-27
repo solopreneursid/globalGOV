@@ -11,7 +11,7 @@ const DEFAULT_MAX_BODY_BYTES = 4 * 1024 * 1024;
 function incomingHeaders(source) {
   const headers = new Headers();
   for (const [name, value] of Object.entries(source)) {
-    if (value === undefined || name.toLowerCase() === "host" || name.toLowerCase() === "connection") continue;
+    if (value === undefined || ["host", "connection", "keep-alive", "transfer-encoding", "upgrade", "te", "trailer", "proxy-authenticate", "proxy-authorization"].includes(name.toLowerCase())) continue;
     if (Array.isArray(value)) {
       for (const item of value) headers.append(name, item);
     } else {
