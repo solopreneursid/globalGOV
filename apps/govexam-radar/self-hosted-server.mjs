@@ -51,7 +51,7 @@ function sendJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-export export function createRuntimeEnvironment({ db, pool, env = process.env } = {}) {
+export function createRuntimeEnvironment({ db, pool, env = process.env } = {}) {
   if (!db) throw new Error("database_adapter_required");
   const runtime = {
     DB: db,
