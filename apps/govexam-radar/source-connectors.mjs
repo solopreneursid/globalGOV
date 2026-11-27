@@ -53,6 +53,13 @@ const HOST_POLICIES = Object.freeze({
   })
 });
 
+const RIGHTS_ALIASES = Object.freeze({
+  "teaching-vacancies.service.gov.uk": "uk-dfe-teaching-vacancies",
+  "jobsearch.gov.mb.ca": "manitoba-jobs",
+  "www.isro.gov.in": "india-isro-opportunities",
+  "recruitment.ssb.gov.in": "india-ssb-recruitment"
+});
+
 const DEFAULT_POLICY = Object.freeze({
   connector: "directory_only",
   automationStatus: "not_assessed",
@@ -77,7 +84,7 @@ function normalizedHost(source) {
 export function sourceAutomationPolicy(source) {
   const host = normalizedHost(source);
   const configured = HOST_POLICIES[host] || DEFAULT_POLICY;
-  const rights = sourceRights(source.id);
+  const rights = sourceRights(source.id) || sourceRights(RIGHTS_ALIASES[host]);
   return Object.freeze({
     sourceId: source.id,
     host,
