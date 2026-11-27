@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { decodeBackupKey } from "./encrypted-backup.mjs";
 import { createPostgresBackup } from "./postgres-backup.mjs";
+import { runPostgresRestoreTest } from "./postgres-restore-test.mjs";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MINIMUM_DAILY_UTC = 2 * 60 + 15;
@@ -20,6 +21,7 @@ export function backupDue(now = Date.now()) {
 
 export function createBackupScheduler({
   backupFn,
+  restoreFn = null,
   now = Date.now,
   intervalMs = DEFAULT_INTERVAL_MS,
   logger = console
@@ -46,7 +48,18 @@ export function createBackupScheduler({
         if (result?.state === "already_completed") lastAttemptedSlot = runId;
         else if (result?.state === "already_running") lastAttemptedSlot = null;
         logger.info?.(JSON.stringify({ event: "daily_backup_complete", runId, state: result?.state || "unknown" }));
-        return result;
+        let restore = null;
+        if (restoreFn && ["ok", "already_completed"].includes(result?.state)) {
+          try {
+            restore = await restoreFn();
+            logger.info?.(JSON.stringify({ event: "monthly_restore_test", state: restore?.state || "unknown" }));
+          } catch (error) {
+            logger.error?.(JSON.stringify({ event: "monthly_restore_test_failed",
+              errorCode: String(error?.message || "restore_test_failed").slice(0, 100) }));
+            restore = { state: "error" };
+          }
+        }
+        return { ...result, restoreTest: restore };
       } catch (error) {
         lastAttemptedSlot = null;
         logger.error?.(JSON.stringify({ event: "daily_backup_failed", runId,
@@ -75,10 +88,25 @@ export function createBackupScheduler({
 async function main() {
   const pool = await createPostgresPoolFromEnv();
   const key = decodeBackupKey(process.env.GLOBALGOV_BACKUP_KEY_HEX);
+  const restoreFn = async () => {
+    const result = await pool.query(
+      "SELECT MAX(restore_verified_at) AS db_restore_at,MAX(document_restore_verified_at) AS document_restore_at FROM backup_runs WHERE state='ok'"
+    );
+    const row = result.rows[0] || {};
+    const dbRestoreAt = row.db_restore_at === null || row.db_restore_at === undefined ? null : Number(row.db_restore_at);
+    const documentRestoreAt = row.document_restore_at === null || row.document_restore_at === undefined
+      ? null : Number(row.document_restore_at);
+    const timestamp = Date.now();
+    if (dbRestoreAt && documentRestoreAt &&
+        timestamp - dbRestoreAt <= 30 * 86400000 &&
+        timestamp - documentRestoreAt <= 30 * 86400000) {
+      return { state: "not_due", dbRestoreAt, documentRestoreAt };
+    }
+    return runPostgresRestoreTest({ pool, env: process.env, key });
+  };
   const scheduler = createBackupScheduler({
-    backupFn: ({ runId }) => createPostgresBackup({
-      pool, env: process.env, key, runId
-    })
+    backupFn: ({ runId }) => createPostgresBackup({ pool, env: process.env, key, runId }),
+    restoreFn
   });
   try {
     await scheduler.start();
