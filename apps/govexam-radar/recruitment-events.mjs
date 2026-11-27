@@ -2,7 +2,7 @@
 // applicant identities, downloads, cookies or login sessions.
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {bounded,checkDocumentRobots} from './recruitment-document.mjs';
+import {fetchOfficialSource} from './source-connectors.mjs';
 export const EVENT_INDEX='https://apps.shar.gov.in/sdscshar/result1.jsp';
 const MAX=512*1024;
 const sha=b=>createHash('sha256').update(b).digest('hex');
@@ -36,11 +36,16 @@ export function parseEventIndex(html,observedAt=new Date().toISOString()){
  }
  return {sourceId:'india-sdsc-shar',sourceUrl:EVENT_INDEX,observedAt,snapshotSha256:sha(Buffer.from(html)),candidates:[...records.values()],reviewState:'requires_review',publicLaunchAuthorized:false};
 }
-export async function probeEvents(fetcher=fetch){
- await checkDocumentRobots('apps.shar.gov.in',fetcher);
- const response=await fetcher(EVENT_INDEX,{redirect:'manual',headers:{'User-Agent':'globalGOVSourceReview/1.0','Accept':'text/html'},signal:AbortSignal.timeout(20000)});
- if(response.status!==200||!/^text\/html\b/i.test(response.headers.get('content-type')||''))throw Error('event_index_unavailable_'+response.status);
- return parseEventIndex((await bounded(response,MAX)).toString('utf8'));
+export async function probeEvents(fetcher=fetch,policy=null){
+ if(!policy||policy.sourceId!=='india-sdsc-shar'||policy.automatedCollectionEnabled!==true||
+    policy.automationStatus!=='approved'||!policy.allowedContentTypes?.includes('text/html')) {
+  throw Error('reviewed_source_policy_required');
+ }
+ const source={id:'india-sdsc-shar',url:EVENT_INDEX};
+ const result=await fetchOfficialSource({source,url:EVENT_INDEX,fetcher,policyOverride:policy,
+  maxBytes:Math.min(MAX,policy.maxBytes||MAX),minIntervalMs:policy.minIntervalMs||5000});
+ if(result.contentType!=='text/html')throw Error('event_index_content_type_unapproved');
+ return parseEventIndex(Buffer.from(result.bytes).toString('utf8'));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{const result=await probeEvents();console.log(JSON.stringify({sourceId:result.sourceId,snapshotSha256:result.snapshotSha256,observedAt:result.observedAt,candidates:result.candidates.length,byType:result.candidates.reduce((a,c)=>{a[c.type]=(a[c.type]||0)+1;return a;},{}),reviewState:result.reviewState}));}
