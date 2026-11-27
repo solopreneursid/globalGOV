@@ -11,7 +11,7 @@ const MODULES=["worker.js","full-ui.mjs","full-css.mjs","enhance.mjs","community
  "source-monitor.mjs","official-feed.mjs","source-rights.mjs","official-ui.mjs","release-preview-ui.mjs","regional-sources.mjs",
  "regional-ui.mjs","manitoba-feed.mjs","india-employment-news.mjs",
  "collector-bridge.mjs","notice-lifecycle.mjs","moderation-api.mjs",
- "moderation-ui.mjs","portable-bookmarks.mjs","lite-ui.mjs","isro-feed.mjs","ssb-feed.mjs","reviewed-catalog.mjs","reviewed-ui.mjs"];
+ "moderation-ui.mjs","portable-bookmarks.mjs","lite-ui.mjs","isro-feed.mjs","ssb-feed.mjs","reviewed-catalog.mjs","reviewed-ui.mjs","usajobs-history.mjs","usajobs-history-ui.mjs"];
 if(!account||!token)throw Error("Cloudflare account ID and API token must be set privately.");
 if(account!==EXPECTED_ACCOUNT)throw Error("refuse_unknown_cloudflare_account");
 // Fail closed before any API call when deployment target is not isolated staging.
