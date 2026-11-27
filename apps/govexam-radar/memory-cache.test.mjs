@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MemoryCache } from "./memory-cache.mjs";
+import { MemoryCache, installDefaultCache } from "./memory-cache.mjs";
 
 test("cache clones responses and expires entries at max-age", async () => {
   let now = 1000;
@@ -35,4 +35,10 @@ test("evicts the least recently used entry at the configured bound", async () =>
   await cache.put(c, response());
   assert.ok(await cache.match(a));
   assert.equal(await cache.match(b), undefined);
+});
+
+test("installs a default Cache API implementation for the Worker runtime", () => {
+  const cache = installDefaultCache();
+  assert.equal(typeof cache.match, "function");
+  assert.equal(typeof cache.put, "function");
 });
