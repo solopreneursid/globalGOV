@@ -1,7 +1,7 @@
 // Encrypted content-addressed PDF volume archive. It is paired with the PostgreSQL backup.
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, mkdir, rm } from "node:fs/promises";
+import { lstat, readdir, readFile, mkdir, rm, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { pathToFileURL } from "node:url";
@@ -74,6 +74,7 @@ export async function createDocumentArchive({ root = process.env.DOCUMENT_STORE_
     return { ...encrypted, documentCount: manifest.count, documentBytes: manifest.bytes };
   } catch (error) {
     child.kill("SIGTERM");
+    await unlink(outputPath).catch(() => {});
     throw error;
   }
 }
