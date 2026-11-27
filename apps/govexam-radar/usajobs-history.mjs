@@ -76,7 +76,7 @@ function buildHistoricUrl(filters){
  if(filters.controlNumber)p.set('USAJOBSControlNumbers',filters.controlNumber);
  if(filters.close){p.set('StartPositionCloseDate',toUsaDate(filters.close.from));p.set('EndPositionCloseDate',toUsaDate(filters.close.to));}
  if(filters.open){p.set('StartPositionOpenDate',toUsaDate(filters.open.from));p.set('EndPositionOpenDate',toUsaDate(filters.open.to));}
- if(filters.cursor)p.set('continuationToken',filters.cursor);
+ if(filters.cursor)p.set('continuationtoken',filters.cursor);
  return url;
 }
 function numberOrNull(v){
