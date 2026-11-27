@@ -20,7 +20,6 @@ export function backupDue(now = Date.now()) {
 
 export function createBackupScheduler({
   backupFn,
-  restoreFn = null,
   now = Date.now,
   intervalMs = DEFAULT_INTERVAL_MS,
   logger = console
@@ -47,12 +46,8 @@ export function createBackupScheduler({
         if (result?.state === "already_completed") lastAttemptedSlot = runId;
         else if (result?.state === "already_running") lastAttemptedSlot = null;
         logger.info?.(JSON.stringify({ event: "daily_backup_complete", runId, state: result?.state || "unknown" }));
-        let restore = null;
-        if (restoreFn && ["ok", "already_completed"].includes(result?.state)) {
-          try {
-            restore = await restoreFn();
-            logger.info?.(JSON.stringify({ event: "monthly_restore_test", state: restore?.state || "unknown" }));
-          } catch (error) {
+        return result;
+      } catch (error) {
             logger.error?.(JSON.stringify({ event: "monthly_restore_test_failed",
               errorCode: String(error?.message || "restore_test_failed").slice(0, 100) }));
             restore = { state: "error" };
