@@ -21,6 +21,9 @@ RUN npm ci --omit=dev --no-audit --no-fund
 COPY apps/govexam-radar/postgres-d1.mjs ./
 COPY apps/govexam-radar/encrypted-backup.mjs ./
 COPY apps/govexam-radar/postgres-backup.mjs ./
+COPY apps/govexam-radar/backup-crypto.mjs ./
+COPY apps/govexam-radar/document-backup.mjs ./
+COPY apps/govexam-radar/postgres-restore-test.mjs ./
 COPY apps/govexam-radar/backup-scheduler.mjs ./
 
 RUN mkdir -p /var/lib/globalgov/backups /var/lib/postgresql/.ssh \
