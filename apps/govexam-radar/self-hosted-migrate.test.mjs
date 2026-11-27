@@ -45,7 +45,7 @@ test("applies missing migrations and skips previously applied versions", async (
       if (sql.startsWith("SELECT version")) {
         return { rows: applied.has(values[0]) ? [{ version: values[0] }] : [] };
       }
-      for (const match of sql.matchAll(/VALUES\\s*\\('([^']+)'\\)/g)) applied.add(match[1]);
+      for (const match of sql.matchAll(/VALUES\s*\('([^']+)'\)/g)) applied.add(match[1]);
       return { rows: [] };
     }
   };
