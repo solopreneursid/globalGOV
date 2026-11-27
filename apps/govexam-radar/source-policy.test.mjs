@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  seedSourcePolicyRegistry, getApprovedSourcePolicy, recordSourcePolicyReview
+  seedSourcePolicyRegistry, getApprovedSourcePolicy, recordSourcePolicyReview, sourcePolicyAllowsUrl
 } from "./source-policy.mjs";
 
 const source = { id: "ssb", url: "https://recruitment.ssb.gov.in/" };
@@ -74,4 +74,16 @@ test("repository policy seeds never satisfy the explicit approval gate", async (
     }] };
   } };
   assert.equal(await getApprovedSourcePolicy(pool, source, Date.now()), null);
+});
+
+test("approved policy paths are exact, host-bound HTTPS GET targets", () => {
+  const policy = {
+    host: "teaching-vacancies.service.gov.uk",
+    automatedCollectionEnabled: true,
+    allowedPaths: ["/api/v1/jobs.json"]
+  };
+  assert.equal(sourcePolicyAllowsUrl(policy, "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json?page=2"), true);
+  assert.equal(sourcePolicyAllowsUrl(policy, "https://teaching-vacancies.service.gov.uk/api/v1/private.json"), false);
+  assert.equal(sourcePolicyAllowsUrl(policy, "https://evil.example/api/v1/jobs.json"), false);
+  assert.equal(sourcePolicyAllowsUrl(policy, "http://teaching-vacancies.service.gov.uk/api/v1/jobs.json"), false);
 });
