@@ -20,7 +20,10 @@ test("restore scheduler uses a PostgreSQL advisory lock and runs only when due",
   };
   const pool = {
     async connect() { return client; },
-    async query() { return { rows: [{ db_restore_at: 1000, document_restore_at: 1000 }] }; }
+    async query(sql) {
+      if (sql.startsWith("SELECT local_path")) return { rows: [{ local_path: "/backup/globalgov.dump.enc" }] };
+      return { rows: [{ db_restore_at: 1000, document_restore_at: 1000 }] };
+    }
   };
   let restoreCalls = 0;
   const result = await runRestoreTestTick({
