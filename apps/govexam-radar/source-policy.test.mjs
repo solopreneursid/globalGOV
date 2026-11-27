@@ -96,3 +96,20 @@ test("source policy seed merges directory and connector-specific official endpoi
   assert.equal(merged.length, 1);
   assert.equal(merged[0].url, "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json");
 });
+
+test("policy seeding retains every permitted content type for a reviewed RSS endpoint", async () => {
+  const calls = [];
+  const pool = { async query(sql, values) {
+    calls.push({ sql, values });
+    return { rowCount: 1, rows: [] };
+  } };
+  const result = await seedSourcePolicyRegistry(pool, [{
+    id: "manitoba-jobs", name: "Manitoba", country: "Canada",
+    url: "https://jobsearch.gov.mb.ca/rss/newJobPostingsFeed.rss"
+  }], 1000);
+  const methods = JSON.parse(calls[0].values[3]);
+  assert.equal(result.inserted, 1);
+  assert.deepEqual(methods.map(item => item.contentType).sort(),
+    ["application/rss+xml", "application/xml", "text/xml"]);
+  assert.ok(methods.every(item => item.path === "/rss/newJobPostingsFeed.rss"));
+});
