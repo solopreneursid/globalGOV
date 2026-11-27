@@ -44,11 +44,11 @@ function automationSeed(policy) {
 }
 
 function reuseSeed(policy) {
-  if (policy.commercialReuseApproved) return "approved";
-  if (String(policy.reuseStatus).includes("conditional")) return "conditional";
-  if (String(policy.reuseStatus).includes("review") || String(policy.reuseStatus).includes("policy")) {
-    return "review_required";
-  }
+  const status = String(policy.reuseStatus || "").toLowerCase();
+  if (status.includes("conditional")) return "conditional";
+  if (status.includes("review")) return "review_required";
+  if (status.includes("not_approved") || status.includes("denied")) return "not_approved";
+  if (policy.commercialReuseApproved === true) return "approved";
   return "not_assessed";
 }
 
@@ -77,11 +77,12 @@ export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) 
   let inserted = 0;
   for (const source of sources) {
     const policy = sourceAutomationPolicy(source);
-    const methods = policy.allowedPaths.flatMap(path =>
-      (policy.allowedContentTypes.length ? policy.allowedContentTypes : ["text/html"]).map(contentType => ({
-        method: "GET", path, contentType
-      }))
-    );
+    const methods = [...new Map(policy.allowedPaths.flatMap(path =>
+      (policy.allowedContentTypes.length ? policy.allowedContentTypes : ["text/html"]).map(contentType => {
+        const method = { method: "GET", path, contentType };
+        return [path + "\\n" + contentType, method];
+      })
+    )).values()];
     const result = await pool.query(
       `INSERT INTO source_policy_reviews
        (source_id,automated_access_status,reuse_status,permitted_methods,allowed_hosts,
