@@ -81,3 +81,29 @@ test("official source fetch refuses redirects, robots restrictions and non-allow
     /robots_access_unconfirmed_302/
   );
 });
+
+test("database-reviewed automation overrides still cannot bypass a robots redirect", async () => {
+  const source = { id: "ssb", url: "https://recruitment.ssb.gov.in/" };
+  const approved = {
+    sourceId: "ssb", host: "recruitment.ssb.gov.in",
+    automationStatus: "approved", automatedCollectionEnabled: true,
+    allowedPaths: ["/advertisements/"],
+    allowedContentTypes: ["application/pdf"],
+    minIntervalMs: 0, maxBytes: 1024
+  };
+  let targetRequested = false;
+  await assert.rejects(fetchOfficialSource({
+    source,
+    url: "https://recruitment.ssb.gov.in/advertisements/notice.pdf",
+    policyOverride: approved,
+    minIntervalMs: 0,
+    fetcher: async input => {
+      if (String(input).endsWith("/robots.txt")) {
+        return new Response("", { status: 302, headers: { location: "/login" } });
+      }
+      targetRequested = true;
+      return new Response("%PDF-1.7", { status: 200, headers: { "content-type": "application/pdf" } });
+    }
+  }), /robots_access_unconfirmed_302/);
+  assert.equal(targetRequested, false);
+});
