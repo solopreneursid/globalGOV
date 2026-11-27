@@ -29,3 +29,19 @@ test("scheduler claims a daily slot once and retries after a failed attempt", as
   assert.deepEqual(calls, ["daily:2026-11-27", "daily:2026-11-27"]);
   await scheduler.stop();
 });
+
+test("scheduler performs a due restore test after a successful daily backup", async () => {
+  const now = Date.parse("2026-11-27T02:15:00Z");
+  const calls = [];
+  const scheduler = createBackupScheduler({
+    now: () => now,
+    backupFn: async ({ runId }) => ({ state: "ok", runId }),
+    restoreFn: async () => { calls.push("restore"); return { state: "verified" }; },
+    logger: { info() {}, error() {} }
+  });
+  const result = await scheduler.tick();
+  assert.equal(result.state, "ok");
+  assert.equal(result.restoreTest.state, "verified");
+  assert.deepEqual(calls, ["restore"]);
+  await scheduler.stop();
+});
