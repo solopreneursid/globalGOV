@@ -215,3 +215,21 @@ test('an eligible SSB notice can be viewed, saved, exported and shown on the low
   assert.match(await page.locator('#credit').innerText(),/SSB/);
  }finally{await page.close();}
 });
+
+test('full application uses strict script CSP and external fixed handlers',async()=>{
+ const page=await browser.newPage({viewport:{width:375,height:820}});
+ try{
+  const violations=[];await page.addInitScript(()=>{window.__ggViolations=[];document.addEventListener('securitypolicyviolation',e=>window.__ggViolations.push(e.violatedDirective));});
+  const response=await page.goto(origin,{waitUntil:'domcontentloaded'});
+  const csp=response.headers()['content-security-policy'];assert.match(csp,/script-src 'self';/);assert.match(csp,/script-src-attr 'none'/);
+  assert.equal(await page.locator('script:not([src])').count(),0);
+  assert.equal(await page.locator('[onclick],[onchange],[oninput],[onsubmit]').count(),0);
+  assert.equal(await page.locator('script[src="/full-app.js"]').count(),1);
+  await page.locator('#official-notice-grid article').first().waitFor();
+  await page.locator('#nav-mobile-saved').click();
+  assert.equal(await page.locator('#view-saved').isVisible(),true);
+  await page.locator('#nav-mobile-radar').click();
+  assert.equal(await page.locator('#view-radar').isVisible(),true);
+  assert.deepEqual(await page.evaluate(()=>window.__ggViolations.filter(x=>x.startsWith('script-src'))),[]);
+ }finally{await page.close();}
+});
