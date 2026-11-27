@@ -103,6 +103,36 @@ services:
       PGSSLMODE: disable
     networks: [data]
 
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+      - .env.backup
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable
+      BACKUP_DIR: /var/lib/globalgov/backups
+    volumes:
+      - globalgov_backups:/var/lib/globalgov/backups
+      - ./secrets/ssh:/var/lib/postgresql/.ssh:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [data, edge]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -129,5 +159,6 @@ networks:
 volumes:
   postgres_data:
   globalgov_documents:
+  globalgov_backups:
   caddy_data:
   caddy_config:
