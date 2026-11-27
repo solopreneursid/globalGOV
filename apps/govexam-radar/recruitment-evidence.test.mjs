@@ -40,3 +40,22 @@ test('reopened window is not the age cutoff or a replacement for unobserved orig
  assert.equal(r.fields.ageCutoff.value.date,'2026-11-09');assert.equal(r.fields.closing,undefined);
  assert.equal(r.events[0].type,'application_reopened');assert.equal(r.publicLaunchAuthorized,false);
 });
+
+test('explicit Hindi labels and date digits remain review-only',()=>{
+ const r=fixture('पद का नाम: सहायक\nकुल रिक्तियाँ: १२\nशैक्षणिक योग्यता: स्नातक\nआवेदन की अंतिम तिथि: ३०.११.२०२६');
+ assert.equal(r.fields.post.value,'सहायक');assert.equal(r.fields.vacancies.value,12);assert.equal(r.fields.closing.value.date,'2026-11-30');assert.equal(r.publicLaunchAuthorized,false);
+});
+
+test('additional reviewed eligibility constraints preserve unknowns and all-of qualifications',()=>{
+ const rules={reviewState:'founder_reviewed',requirements:[
+  {id:'exp',kind:'experience',minimumMonths:24,cutoff:'2026-11-09',definitionReviewed:true,cutoffReviewed:true,evidencePage:2},
+  {id:'cit',kind:'citizenship',acceptedCodes:['IN'],scopeReviewed:true,exceptionsReviewed:true,evidencePage:2},
+  {id:'qual',kind:'qualification_all',groups:[['BE','BTECH'],['CERT']],equivalenceReviewed:true,evidencePage:3}
+ ]};
+ const profile={relevantExperienceMonths:24,experienceAsOf:'2026-11-09',citizenshipCodes:['IN'],qualificationCodes:['BTECH','CERT']};
+ assert.equal(screenReviewedRequirements(rules,profile).status,'listed_checks_match_not_full_eligibility');
+ assert.equal(screenReviewedRequirements(rules,{...profile,relevantExperienceMonths:23}).status,'requirement_mismatch');
+ assert.equal(screenReviewedRequirements(rules,{...profile,experienceAsOf:'2026-11-10'}).status,'review_required');
+ assert.equal(screenReviewedRequirements(rules,{...profile,citizenshipCodes:['GB'],qualificationCodes:['BTECH']}).status,'review_required');
+ assert.equal(screenReviewedRequirements(rules,{...profile,citizenshipCodes:['GB'],citizenshipComplete:true}).status,'requirement_mismatch');
+});

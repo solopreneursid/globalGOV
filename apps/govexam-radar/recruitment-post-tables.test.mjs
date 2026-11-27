@@ -16,3 +16,10 @@ test('conflicting post codes are excluded; wrapped and category columns are not 
  const bad=extractPostTableCandidates(head+'\n01            Multi line\n              Engineer                      2');assert.equal(bad.posts.length,0);assert.equal(bad.issues[0].type,'unresolved_table_row');
  assert.equal(extractPostTableCandidates('Post Code    Name of Post    UR    SC    Total\n01    Engineer    2    1    3').posts.length,0);
 });
+
+test('Hindi headers and Devanagari digits preserve per-post meaning',()=>{
+ const header='पद कोड'.padEnd(14)+'पद का नाम'.padEnd(30)+'कुल रिक्तियाँ';
+ const row=line('०१','तकनीकी सहायक','१२');
+ const r=extractPostTableCandidates(header+'\n'+row);
+ assert.equal(r.posts.length,1);assert.equal(r.posts[0].postCode,'01');assert.equal(r.posts[0].postTitle,'तकनीकी सहायक');assert.equal(r.posts[0].vacancies,12);
+});

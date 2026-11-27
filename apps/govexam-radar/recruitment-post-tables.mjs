@@ -1,11 +1,12 @@
 // Conservative column-based extraction from pdftotext -layout output.
 // Only explicitly recognised headers; no inferred row joins or vacancy sums.
 const headerNames={
- code:/^(?:post\s*code|post\s*no\.?|code)$/i,
- title:/^(?:name\s+of\s+(?:the\s+)?post|post\s+name|name\s+of\s+post)$/i,
- vacancies:/^(?:total\s+vacancies|no\.?\s+of\s+vacancies|vacancies|no\.?\s+of\s+posts)$/i
+ code:/^(?:post\s*code|post\s*no\.?|code|पद\s*कोड|पद\s*संख्या)(?:\s*\/\s*(?:पद\s*कोड|पद\s*संख्या|post\s*code))?$/iu,
+ title:/^(?:name\s+of\s+(?:the\s+)?post|post\s+name|पद\s+का\s+नाम)(?:\s*\/\s*(?:पद\s+का\s+नाम|name\s+of\s+post))?$/iu,
+ vacancies:/^(?:total\s+vacancies|no\.?\s+of\s+vacancies|vacancies|no\.?\s+of\s+posts|कुल\s+रिक्तियाँ|कुल\s+रिक्तियां|रिक्तियों\s+की\s+संख्या)(?:\s*\/\s*(?:कुल\s+रिक्तियाँ|कुल\s+रिक्तियां|total\s+vacancies))?$/iu
 };
 const tidy=s=>s.trim().replace(/\s+/g,' ');
+const digits=s=>s.replace(/[०-९]/g,c=>String(c.codePointAt(0)-0x966));
 function cells(line){return [...line.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)].map(x=>({text:tidy(x[0]),start:x.index}));}
 function header(line){
  const parts=cells(line);
@@ -26,10 +27,10 @@ export function extractPostTableCandidates(text){
    if(!line.trim()||/^\s*[-=]+\s*$/.test(line)){active=null;continue;}
    const parts=cells(line);
    if(parts.length!==3){issues.push({type:'unresolved_table_row',page:pi+1,line:li+1,headerLine:active.headerLine});active=null;continue;}
-   const [code,title,count]=parts.map(x=>x.text);
+   const [rawCode,title,rawCount]=parts.map(x=>x.text),code=digits(rawCode),count=digits(rawCount);
    const [a,b,c]=active.positions;
    // Permit small alignment shifts, but never move numbers between columns.
-   if(parts[0].start>b-2||parts[1].start<b-2||parts[1].start>=c-2||parts[2].start<c-2||!/^[A-Za-z0-9][A-Za-z0-9/-]{0,29}$/.test(code)||!/[A-Za-z]/.test(title)||title.length>200||!/^[1-9]\d{0,5}$/.test(count)){
+   if(parts[0].start>b-2||parts[1].start<b-2||parts[1].start>=c-2||parts[2].start<c-2||!/^[A-Za-z0-9][A-Za-z0-9/-]{0,29}$/.test(code)||!/\p{L}/u.test(title)||title.length>200||!/^[1-9]\d{0,5}$/.test(count)){
     issues.push({type:'unresolved_table_row',page:pi+1,line:li+1,headerLine:active.headerLine});active=null;continue;
    }
    const row={postCode:code,postTitle:title,vacancies:Number(count),evidence:{page:pi+1,line:li+1,headerLine:active.headerLine},state:'candidate_only'};
