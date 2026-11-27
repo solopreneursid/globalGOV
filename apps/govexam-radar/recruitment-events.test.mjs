@@ -17,7 +17,7 @@ test('event index fetch respects robots denial under a reviewed source policy',a
  let calls=0;
  const policy={sourceId:'india-sdsc-shar',host:'apps.shar.gov.in',automationStatus:'approved',
   automatedCollectionEnabled:true,allowedPaths:['/sdscshar/result1.jsp'],allowedContentTypes:['text/html'],
-  maxBytes:MAX,minIntervalMs:5000};
+  maxBytes:512*1024,minIntervalMs:5000};
  await assert.rejects(probeEvents(async()=>{calls++;return new Response('',{status:403});},policy),/robots_access_unconfirmed_403/);
  assert.equal(calls,1);
  assert.throws(()=>parseEventIndex('<html>Login</html>'),/unsupported_event_index_schema/);
