@@ -213,11 +213,14 @@ export async function fetchOfficialSource({
   maxBytes = 2 * 1024 * 1024,
   minIntervalMs = 5000,
   userAgent = "globalGOV",
+  policyOverride = null,
   now = Date.now,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 } = {}) {
-  const policy = sourceAutomationPolicy(source);
-  if (!policy.automatedCollectionEnabled) throw new Error("automated_access_not_approved");
+  const policy = policyOverride || sourceAutomationPolicy(source);
+  if (!policy || policy.sourceId !== source?.id || !policy.automatedCollectionEnabled) {
+    throw new Error("automated_access_not_approved");
+  }
   if (policy.automationStatus === "research_only") throw new Error("research_only_connector");
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 10 * 1024 * 1024 ||
       !Number.isSafeInteger(minIntervalMs) || minIntervalMs < 0 || minIntervalMs > 300000) {
