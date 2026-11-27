@@ -15,7 +15,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [backend]
+    networks: [data]
     security_opt:
       - no-new-privileges:true
 
@@ -54,7 +54,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks: [backend]
+    networks: [backend, data]
 
   scheduler:
     build:
@@ -82,7 +82,7 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    networks: [backend]
+    networks: [backend, data]
 
   migrate:
     build:
@@ -101,7 +101,7 @@ services:
       PGUSER: ${POSTGRES_USER:-globalgov}
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       PGSSLMODE: disable
-    networks: [backend]
+    networks: [data]
 
   caddy:
     image: caddy:2-alpine
@@ -122,6 +122,8 @@ services:
 
 networks:
   backend:
+  data:
+    internal: true
   edge:
 
 volumes:
