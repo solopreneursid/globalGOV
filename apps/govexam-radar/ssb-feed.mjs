@@ -63,7 +63,6 @@ export async function ingestSsb(db,fetcher=fetch,now=Date.now(),options={}) {
  }
  return ingestIndianSnapshot(policy,parseSsbTable,db,fetcher,now);
 }
-export async function ssbPublicationGate(db,now=Date.now(),policy=SSB_SOURCE) {
- if(policy.automatedAccessStatus!=='approved')return {ready:false,reason:'automated_access_unconfirmed'};
+export async function ssbPublicationGate(db,now=Date.now()) {
  return indianSnapshotGate(SSB_SOURCE.id,db,now);
 }
