@@ -9,6 +9,24 @@ const CONTENT_TYPES = new Set([
   "text/xml", "text/html", "text/plain"
 ]);
 
+function validPolicyPath(path) {
+  if (typeof path !== "string" || path.length > 512 || !path.startsWith("/") ||
+      path.includes("\\") || path.includes("//")) return false;
+  try {
+    const parsed = new URL(path, "https://policy.invalid");
+    return parsed.origin === "https://policy.invalid" && parsed.pathname === path &&
+      !parsed.search && !parsed.hash &&
+      !path.split("/").some(segment => segment === "." || segment === "..");
+  } catch { return false; }
+}
+
+function validPolicyUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.hash;
+  } catch { return false; }
+}
+
 function jsonValue(value, fallback) {
   if (Array.isArray(value)) return value;
   if (typeof value === "string") {
@@ -54,7 +72,7 @@ export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) 
        ON CONFLICT(source_id) DO NOTHING`,
       [source.id, automationSeed(policy), reuseSeed(policy), JSON.stringify(methods),
         [policy.host], policy.policyUrl || source.url,
-        automationSeed(policy) === "approved" ? now : null,
+        null,
         "repository-policy-seed",
         "Seeded from the version-controlled first-party connector registry. This seed is not independent legal approval; review before expanding collection or reuse.",
         now]
@@ -75,19 +93,25 @@ export async function getApprovedSourcePolicy(pool, source, now = Date.now()) {
     [source.id]
   );
   const row = result.rows[0];
+  const reviewedAt = Number(row?.reviewed_at);
+  const expiresAt = Number(row?.expires_at);
   if (!row || row.automated_access_status !== "approved" ||
-      !row.reviewed_at || !row.reviewer_label ||
-      (row.expires_at !== null && row.expires_at !== undefined && Number(row.expires_at) <= now)) {
+      typeof row.reviewer_label !== "string" ||
+      row.reviewer_label.trim().toLowerCase() === "repository-policy-seed" ||
+      !Number.isSafeInteger(reviewedAt) || reviewedAt <= 0 || reviewedAt > now ||
+      !Number.isSafeInteger(expiresAt) || expiresAt <= now || expiresAt <= reviewedAt ||
+      !validPolicyUrl(row.policy_url) || typeof row.notes !== "string" || !row.notes.trim()) {
     return null;
   }
   const registered = new URL(source.url);
   const allowedHosts = Array.isArray(row.allowed_hosts) ? row.allowed_hosts : [];
-  if (registered.protocol !== "https:" || !allowedHosts.includes(registered.hostname.toLowerCase())) {
+  if (registered.protocol !== "https:" || allowedHosts.length !== 1 ||
+      allowedHosts[0] !== registered.hostname.toLowerCase()) {
     return null;
   }
   const methods = jsonValue(row.permitted_methods, []);
   const getMethods = methods.filter(item => item && item.method === "GET" &&
-    typeof item.path === "string" && item.path.startsWith("/") && !item.path.includes("..") &&
+    validPolicyPath(item.path) &&
     typeof item.contentType === "string" && CONTENT_TYPES.has(item.contentType.toLowerCase()));
   if (!getMethods.length) return null;
   return Object.freeze({
@@ -102,8 +126,8 @@ export async function getApprovedSourcePolicy(pool, source, now = Date.now()) {
     allowedContentTypes: Object.freeze([...new Set(getMethods.map(item => item.contentType.toLowerCase()))]),
     policyUrl: row.policy_url,
     reviewerLabel: row.reviewer_label,
-    reviewedAt: Number(row.reviewed_at),
-    expiresAt: row.expires_at === null || row.expires_at === undefined ? null : Number(row.expires_at),
+    reviewedAt,
+    expiresAt,
     minIntervalMs: 5000,
     maxBytes: 10 * 1024 * 1024
   });
@@ -118,30 +142,34 @@ export async function recordSourcePolicyReview(pool, {
       !AUTOMATION.has(automatedAccessStatus) || !REUSE.has(reuseStatus) ||
       !Array.isArray(permittedMethods) || permittedMethods.length > 32 ||
       !Array.isArray(allowedHosts) || !allowedHosts.length || allowedHosts.length > 8 ||
-      !Number.isSafeInteger(reviewedAt) || (expiresAt !== null && !Number.isSafeInteger(expiresAt)) ||
+      !Number.isSafeInteger(reviewedAt) || reviewedAt > Date.now() + 60000 ||
+      (expiresAt !== null && !Number.isSafeInteger(expiresAt)) ||
       typeof reviewerLabel !== "string" || !reviewerLabel.trim() || reviewerLabel.length > 120 ||
+      reviewerLabel.trim().toLowerCase() === "repository-policy-seed" ||
       typeof notes !== "string" || notes.length > 4000) {
     throw new Error("source_policy_review_invalid");
   }
   const registered = new URL(source.url);
   const hosts = [...new Set(allowedHosts.map(host => String(host).toLowerCase()))];
-  if (registered.protocol !== "https:" || !hosts.includes(registered.hostname.toLowerCase()) ||
-      hosts.some(host => !HOST.test(host))) throw new Error("source_policy_host_mismatch");
+  if (registered.protocol !== "https:" || hosts.length !== 1 ||
+      hosts[0] !== registered.hostname.toLowerCase() || hosts.some(host => !HOST.test(host))) {
+    throw new Error("source_policy_host_mismatch");
+  }
   const methods = permittedMethods.map(item => {
     if (!item || item.method !== "GET" || typeof item.path !== "string" ||
-        !item.path.startsWith("/") || item.path.includes("..") ||
+        !validPolicyPath(item.path) ||
         typeof item.contentType !== "string" || !CONTENT_TYPES.has(item.contentType.toLowerCase())) {
       throw new Error("source_policy_method_invalid");
     }
     return { method: "GET", path: item.path, contentType: item.contentType.toLowerCase() };
   });
   if (automatedAccessStatus === "approved" &&
-      (methods.length === 0 || !policyUrl || !notes.trim() || expiresAt === null || expiresAt <= reviewedAt)) {
+      (methods.length === 0 || !policyUrl || !notes.trim() || expiresAt === null || expiresAt <= reviewedAt || expiresAt <= Date.now())) {
     throw new Error("approved_source_policy_requires_evidence_expiry_and_get_method");
   }
   if (policyUrl !== null) {
     const url = new URL(policyUrl);
-    if (url.protocol !== "https:" || url.username || url.password) throw new Error("source_policy_url_invalid");
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("source_policy_url_invalid");
   }
   const result = await pool.query(
     `INSERT INTO source_policy_reviews
