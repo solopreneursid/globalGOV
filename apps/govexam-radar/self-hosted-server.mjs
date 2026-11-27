@@ -51,10 +51,12 @@ function sendJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-export function createRuntimeEnvironment({ db, env = process.env } = {}) {
+export export function createRuntimeEnvironment({ db, pool, env = process.env } = {}) {
   if (!db) throw new Error("database_adapter_required");
   const runtime = {
     DB: db,
+    SOURCE_POLICY_POOL: pool,
+    REQUIRE_SOURCE_POLICY_REGISTRY: env.REQUIRE_SOURCE_POLICY_REGISTRY === "true" ? "true" : "false",
     USAJOBS_FETCH: fetch
   };
   if (env.INGEST_HMAC_KEY) runtime.INGEST_HMAC_KEY = env.INGEST_HMAC_KEY;
@@ -81,7 +83,7 @@ export function createNodeServer({
       origin.pathname !== "/" || origin.search || origin.hash) {
     throw new Error("invalid_public_origin");
   }
-  const runtimeEnv = createRuntimeEnvironment({ db, env });
+  const runtimeEnv = createRuntimeEnvironment({ db, pool: db.pool || null, env });
 
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = Date.now();
