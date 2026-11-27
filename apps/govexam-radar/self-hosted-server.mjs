@@ -104,7 +104,9 @@ export function createNodeServer({
         }
         const migration = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
           .bind("001_core").first();
-        if (!migration) {
+        const operations = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
+          .bind("002_first_party_operations").first();
+        if (!migration || !operations) {
           sendJson(outgoing, 503, { status: "not_ready", reason: "database_schema_not_migrated" });
           return;
         }
@@ -186,7 +188,9 @@ export async function startServer({ env = process.env, workerImpl = worker, logg
   try {
     const migration = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
       .bind("001_core").first();
-    if (!migration) throw new Error("database_schema_not_migrated");
+    const operations = await db.prepare("SELECT version FROM schema_migrations WHERE version=?")
+      .bind("002_first_party_operations").first();
+    if (!migration || !operations) throw new Error("database_schema_not_migrated");
 
     const server = createNodeServer({
       db,
