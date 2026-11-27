@@ -26,6 +26,10 @@ export async function runRestoreTestTick({
     const lock = await client.query("SELECT pg_try_advisory_lock($1,$2) AS acquired", [LOCK_CLASS, LOCK_ID]);
     locked = lock.rows[0]?.acquired === true;
     if (!locked) return { state: "already_running" };
+    const latestBackup = await pool.query(
+      "SELECT local_path FROM backup_runs WHERE state='ok' AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1"
+    );
+    if (!latestBackup.rows[0]?.local_path) return { state: "waiting_for_verified_backup" };
     const result = await pool.query(
       "SELECT MAX(restore_verified_at) AS db_restore_at,MAX(document_restore_verified_at) AS document_restore_at FROM backup_runs WHERE state='ok'"
     );
