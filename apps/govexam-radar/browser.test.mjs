@@ -265,8 +265,9 @@ test('USAJOBS archive paginates without skipped records and renders archived tex
    assert.match(await page.locator('.notice').innerText(),/Historical data only/);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+3),true);
    await page.locator('#series').fill('2210');
+   const searchResponse=page.waitForResponse(response=>response.url().includes('/api/usajobs/history?')&&new URL(response.url()).searchParams.get('series')==='2210');
    await page.locator('#history-form button[type="submit"]').click();
-   await page.waitForResponse(response=>response.url().includes('/api/usajobs/history?')&&new URL(response.url()).searchParams.get('series')==='2210');
+   await searchResponse;
    assert.equal(await page.locator('#records .record').count(),20);
    const firstQuery=requests.find(x=>x.searchParams.get('series')==='2210');
    assert.equal(firstQuery.searchParams.get('series'),'2210');
@@ -286,6 +287,10 @@ test('USAJOBS archive paginates without skipped records and renders archived tex
    assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 25');
    assert.equal(await page.locator('#records .record h3').last().innerText(),'Archive Record 44');
    assert.ok(requests.some(x=>x.searchParams.get('cursor')==='next%3D%3D'));
+   await page.locator('#previous').click();
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 20');
+   await page.locator('#next').click();
+   assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 25');
    await page.locator('#next').click();
    assert.equal(await page.locator('#records .record').count(),5);
    assert.equal(await page.locator('#records .record h3').first().innerText(),'Archive Record 45');
