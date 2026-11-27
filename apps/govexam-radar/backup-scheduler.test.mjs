@@ -24,7 +24,7 @@ test("scheduler claims a daily slot once and retries after a failed attempt", as
     logger: { info() {}, error() {} }
   });
   await assert.rejects(scheduler.tick(), /synthetic_failure/);
-  assert.deepEqual(await scheduler.tick(), { state: "ok", restoreTest: null });
+  assert.deepEqual(await scheduler.tick(), { state: "ok" });
   assert.deepEqual(await scheduler.tick(), { state: "already_attempted", runId: "daily:2026-11-27" });
   assert.deepEqual(calls, ["daily:2026-11-27", "daily:2026-11-27"]);
   await scheduler.stop();
