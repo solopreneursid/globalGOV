@@ -7,6 +7,8 @@ set -eu
 : "${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set}"
 : "${BACKUP_DB_USER:?BACKUP_DB_USER must be set}"
 : "${BACKUP_DB_PASSWORD:?BACKUP_DB_PASSWORD must be set}"
+: "${RESTORE_TEST_DB_USER:?RESTORE_TEST_DB_USER must be set}"
+: "${RESTORE_TEST_DB_PASSWORD:?RESTORE_TEST_DB_PASSWORD must be set}"
 
 psql --no-psqlrc --set=ON_ERROR_STOP=1 \
   --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
@@ -15,15 +17,18 @@ psql --no-psqlrc --set=ON_ERROR_STOP=1 \
   --set=app_user="$APP_DB_USER" \
   --set=app_password="$APP_DB_PASSWORD" \
   --set=backup_user="$BACKUP_DB_USER" \
-  --set=backup_password="$BACKUP_DB_PASSWORD" <<'SQL'
+  --set=backup_password="$BACKUP_DB_PASSWORD" \
+  --set=restore_user="$RESTORE_TEST_DB_USER" \
+  --set=restore_password="$RESTORE_TEST_DB_PASSWORD" <<'SQL'
 CREATE ROLE :"app_user" LOGIN PASSWORD :'app_password';
 CREATE ROLE :"backup_user" LOGIN PASSWORD :'backup_password';
-ALTER ROLE :"backup_user" CREATEDB;
+CREATE ROLE :"restore_user" LOGIN CREATEDB PASSWORD :'restore_password' CONNECTION LIMIT 2;
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db_name" TO :"app_user", :"backup_user";
 GRANT USAGE ON SCHEMA public TO :"app_user", :"backup_user";
 GRANT pg_read_all_data TO :"backup_user";
+GRANT CONNECT ON DATABASE postgres TO :"restore_user";
 
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_user";
