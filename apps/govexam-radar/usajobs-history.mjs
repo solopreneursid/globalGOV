@@ -151,7 +151,7 @@ export function parseUsajobsHistoricPage(body,now=Date.now()){
 async function boundedJson(url,fetcher,limit){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
  try{
-  const init={method:'GET',redirect:'manual',signal:controller.signal,headers:{Accept:'application/json','User-Agent':'globalGOV/2.8 (+https://github.com/solopreneursid/globalGOV)'}};
+  const init={method:'GET',redirect:'manual',signal:controller.signal,headers:{Accept:'application/json'}};
   let response=await fetcher(url.toString(),init);
   if(response.status>=300&&response.status<400){
    const location=response.headers.get('location');
