@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseUsajobsHistoricPage,parseUsajobsAnnouncementText,handleUsajobsHistory,handleUsajobsAnnouncementText,normalizeHistoryFilters} from './usajobs-history.mjs';
+import {parseUsajobsHistoricPage,parseUsajobsAnnouncementText,handleUsajobsHistory,handleUsajobsAnnouncementText} from './usajobs-history.mjs';
 const now=Date.parse('2026-11-27T00:00:00Z');
 const record=(id=12345678,extra={})=>({usajobsControlNumber:id,announcementNumber:'TEST-2026-01',positionTitle:'IT Specialist',hiringAgencyName:'Synthetic agency',hiringAgencyCode:'VA',hiringDepartmentName:'Department of Veterans Affairs',hiringDepartmentCode:'VA',positionOpenDate:'2026-01-01',positionCloseDate:'2026-02-01',positionExpireDate:'1900-01-01',positionOpeningStatus:'Applications under review',minimumSalary:100000,maximumSalary:120000,minimumGrade:'12',maximumGrade:'13',hiringPaths:[{hiringPath:'The public'}],jobCategories:[{series:'2210'}],positionLocations:[{positionLocationCity:'Washington',positionLocationState:'DC',positionLocationCountry:'United States'}],...extra});
 const page=(rows,token='next%3D%3D')=>({paging:{metadata:{totalCount:100,pageSize:500,continuationToken:token}},data:rows});
@@ -12,14 +12,26 @@ test('accepts documented PascalCase field names and omits malformed rows',()=>{
  const raw={USAJOBSControlNumber:9,PositionTitle:'Analyst',HiringAgencyName:'Agency',PositionOpenDate:'2025-01-01T00:00:00',PositionCloseDate:'2025-01-10',PositionExpireDate:null,HiringPaths:[{HiringPath:'The public'}],JobCategories:[{Series:'2210'}],PositionLocations:[{PositionLocationCity:'Arlington'}]};
  const r=parseUsajobsHistoricPage(page([raw]),now);assert.equal(r.records.length,1);assert.equal(r.records[0].controlNumber,'9');assert.deepEqual(r.records[0].series,['2210']);
 });
-test('validates bounded close-date filters and maps to documented API query names',()=>{
- const p=new URLSearchParams('series=2210&agency=VA&closeFrom=2025-11-27&closeTo=2026-11-27');
- const f=normalizeHistoryFilters(p,now);assert.equal(f.series,'2210');assert.equal(f.close.from,'2025-11-27');
- assert.throws(()=>normalizeHistoryFilters(new URLSearchParams('series=2210'),now),/closed_date_range_required/);
- assert.throws(()=>normalizeHistoryFilters(new URLSearchParams('closeFrom=2023-01-01&closeTo=2026-11-27'),now),/invalid_close_range/);
- assert.throws(()=>normalizeHistoryFilters(new URLSearchParams('closeFrom=2026-11-27&closeTo=2026-11-28'),now),/future_close_to/);
- assert.throws(()=>normalizeHistoryFilters(new URLSearchParams('series=2210&closeFrom=2025-11-27&closeTo=2026-11-27&evil=https://x.test'),now),/unsupported_filter/);
- assert.throws(()=>normalizeHistoryFilters(new URLSearchParams('series=2210&series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),now),/duplicate_filter/);
+test('validates bounded close-date filters and maps to documented API query names',async()=>{
+ let calls=0,upstreamUrl=null;
+ const valid=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&agency=VA&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async url=>{calls++;upstreamUrl=new URL(url);return Response.json(page([record()],null));}});
+ assert.equal(valid.status,200);assert.equal(calls,1);
+ assert.equal(upstreamUrl.searchParams.get('PositionSeries'),'2210');
+ assert.equal(upstreamUrl.searchParams.get('HiringAgencyCodes'),'VA');
+ assert.equal(upstreamUrl.searchParams.get('StartPositionCloseDate'),'11-27-2025');
+ assert.equal(upstreamUrl.searchParams.get('EndPositionCloseDate'),'11-27-2026');
+ const invalidQueries=[
+  'series=2210',
+  'closeFrom=2023-01-01&closeTo=2026-11-27',
+  'closeFrom=2026-11-27&closeTo=2026-11-28',
+  'series=2210&closeFrom=2025-11-27&closeTo=2026-11-27&evil=https://x.test',
+  'series=2210&series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'
+ ];
+ for(const query of invalidQueries){
+  let touched=false;
+  const response=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?'+query),{now,fetcher:async()=>{touched=true;return Response.json(page([],null));}});
+  assert.equal(response.status,400,query);assert.equal(touched,false,query);
+ }
 });
 test('announcement text maps only documented public fields and enforces exact control number',()=>{
  const raw={usajobsControlNumber:77,announcementNumber:'ANN-77',summary:'Summary',duties:'Duties',requirementsQualifications:'Qualifications',howToApply:'Historical instructions',privateApplicantData:'do not retain'};

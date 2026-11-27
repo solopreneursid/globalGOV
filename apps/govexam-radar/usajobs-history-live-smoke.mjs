@@ -18,7 +18,9 @@ if(!page.ok){
 }
 const data=await page.json();
 assert.ok(Array.isArray(data.records));assert.ok(Number.isSafeInteger(data.totalCount));assert.ok(data.records.length<=1000);assert.equal(data.source,'USAJOBS Historic JOAs public data');
-assert.ok(data.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)));
+const inCloseRange=row=>{const close=row.positionCloseDate||row.effectiveCloseDate;return typeof close==='string'&&close>=iso(start)&&close<=iso(end);};
+assert.ok(data.totalCount>=data.records.length);
+assert.ok(data.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)&&inCloseRange(x)),'first page records must match the requested closing-date range');
 assert.ok(data.nextCursor===null||typeof data.nextCursor==='string');
 const html=await fetch(base+'/usajobs-history',{redirect:'error',signal:AbortSignal.timeout(15000)});
 assert.equal(html.status,200);assert.match(await html.text(),/Past USAJOBS announcements/);assert.match(html.headers.get('x-robots-tag')||'',/noindex/i);
@@ -40,7 +42,9 @@ if(data.nextCursor){
  const nextData=await next.json();
  assert.ok(Array.isArray(nextData.records));
  const firstIds=new Set(data.records.map(x=>x.controlNumber));
- assert.ok(nextData.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)&&!firstIds.has(x.controlNumber)));
+ assert.ok(nextData.records.length>0,'continuation token must return another page');
+ assert.ok(nextData.records.every(x=>x.status==='historical_closed'&&x.effectiveCloseDate<=iso(end)&&inCloseRange(x)&&!firstIds.has(x.controlNumber)),'second page must remain in range and contain no duplicates');
  nextPageRecords=nextData.records.length;
 }
-console.log(JSON.stringify({staging:'verified',historyRecords:data.records.length,nextPageRecords,totalCount:data.totalCount,rejected:data.rejected,nextPageAvailable:!!data.nextCursor,detail,archivePage:'ok',retrievedAt:data.retrievedAt}));
+const closeDates=data.records.map(x=>x.positionCloseDate||x.effectiveCloseDate).filter(Boolean).sort();
+console.log(JSON.stringify({staging:'verified',historyRecords:data.records.length,pageSize:data.pageSize,nextPageRecords,totalCount:data.totalCount,requestedCloseRange:[iso(start),iso(end)],returnedCloseRange:closeDates.length?[closeDates[0],closeDates.at(-1)]:null,rejected:data.rejected,nextPageAvailable:!!data.nextCursor,detail,archivePage:'ok',retrievedAt:data.retrievedAt}));
