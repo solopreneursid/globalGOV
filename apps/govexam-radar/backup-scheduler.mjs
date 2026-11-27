@@ -2,7 +2,6 @@ import { pathToFileURL } from "node:url";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { decodeBackupKey } from "./encrypted-backup.mjs";
 import { createPostgresBackup } from "./postgres-backup.mjs";
-import { runPostgresRestoreTest } from "./postgres-restore-test.mjs";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MINIMUM_DAILY_UTC = 2 * 60 + 15;
@@ -88,25 +87,8 @@ export function createBackupScheduler({
 async function main() {
   const pool = await createPostgresPoolFromEnv();
   const key = decodeBackupKey(process.env.GLOBALGOV_BACKUP_KEY_HEX);
-  const restoreFn = async () => {
-    const result = await pool.query(
-      "SELECT MAX(restore_verified_at) AS db_restore_at,MAX(document_restore_verified_at) AS document_restore_at FROM backup_runs WHERE state='ok'"
-    );
-    const row = result.rows[0] || {};
-    const dbRestoreAt = row.db_restore_at === null || row.db_restore_at === undefined ? null : Number(row.db_restore_at);
-    const documentRestoreAt = row.document_restore_at === null || row.document_restore_at === undefined
-      ? null : Number(row.document_restore_at);
-    const timestamp = Date.now();
-    if (dbRestoreAt && documentRestoreAt &&
-        timestamp - dbRestoreAt <= 30 * 86400000 &&
-        timestamp - documentRestoreAt <= 30 * 86400000) {
-      return { state: "not_due", dbRestoreAt, documentRestoreAt };
-    }
-    return runPostgresRestoreTest({ pool, env: process.env, key });
-  };
   const scheduler = createBackupScheduler({
-    backupFn: ({ runId }) => createPostgresBackup({ pool, env: process.env, key, runId }),
-    restoreFn
+    backupFn: ({ runId }) => createPostgresBackup({ pool, env: process.env, key, runId })
   });
   try {
     await scheduler.start();
