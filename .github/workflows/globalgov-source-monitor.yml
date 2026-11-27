@@ -40,3 +40,27 @@ jobs:
           path: globalgov-monitor.json
           retention-days: 14
           if-no-files-found: error
+  incident:
+    needs: inspect
+    if: ${{ failure() && needs.inspect.result == 'failure' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'globalGOV monitoring incident: canonical staging';
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'open', per_page: 100
+            });
+            if (open.some(i => !i.pull_request && i.title === title)) {
+              core.info('Existing incident retained; no duplicate notification.');
+              return;
+            }
+            await github.rest.issues.create({
+              ...context.repo, title,
+              body: 'An independent globalGOV health check failed. Review the run and its bounded JSON evidence: https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + '\n\nNo application changes or automatic issue closure performed. Known SSB restriction: #3.'
+            });
