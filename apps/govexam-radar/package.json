@@ -25,7 +25,8 @@
     "import:d1:plan": "node postgres-import.mjs plan",
     "import:d1:apply": "node postgres-import.mjs apply",
     "backup:restore-test": "node postgres-restore-test.mjs",
-    "backup:document-verify": "node document-backup.mjs"
+    "backup:document-verify": "node document-backup.mjs",
+    "source-policy:review": "node source-policy-admin.mjs review"
   },
   "dependencies": {
     "pg": "8.16.3"
