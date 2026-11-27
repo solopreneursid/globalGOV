@@ -233,7 +233,14 @@ export async function createPostgresPoolFromEnv(env = process.env) {
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
     allowExitOnIdle: false,
+    options: "-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000",
     ssl: env.PGSSLMODE === "require" ? { rejectUnauthorized: true } : false
+  });
+  pool.on("error", error => {
+    console.error(JSON.stringify({
+      event: "postgres_idle_client_error",
+      errorCode: String(error?.code || error?.name || "database_error")
+    }));
   });
   return pool;
 }
