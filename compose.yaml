@@ -163,8 +163,10 @@ services:
       PGPASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
       PGSSLMODE: disable
       BACKUP_DIR: /var/lib/globalgov/backups
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
     volumes:
       - globalgov_backups:/var/lib/globalgov/backups
+      - globalgov_documents:/var/lib/globalgov/documents:ro
       - ./secrets/ssh:/var/lib/postgresql/.ssh:ro
     read_only: true
     tmpfs:
