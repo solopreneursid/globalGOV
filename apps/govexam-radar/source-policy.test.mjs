@@ -39,10 +39,22 @@ test("founder policy review rejects host expansion and non-GET methods", async (
   const base = {
     source, automatedAccessStatus: "approved", reuseStatus: "conditional",
     permittedMethods: [{ method: "GET", path: "/advertisements/", contentType: "application/pdf" }],
-    allowedHosts: ["recruitment.ssb.gov.in"], reviewerLabel: "founder", reviewedAt: 1000
+    allowedHosts: ["recruitment.ssb.gov.in"],
+    policyUrl: "https://recruitment.ssb.gov.in/websitepolicyUrl",
+    reviewerLabel: "founder", reviewerAt: 1000, reviewedAt: 1000, expiresAt: 5000
   };
   await assert.rejects(recordSourcePolicyReview(pool, { ...base, allowedHosts: ["example.com"] }), /host_mismatch/);
   await assert.rejects(recordSourcePolicyReview(pool, {
     ...base, permittedMethods: [{ method: "POST", path: "/", contentType: "application/pdf" }]
   }), /method_invalid/);
+});
+
+test("approved source policy requires a cited policy and expiry", async () => {
+  const pool = { async query() { return { rowCount: 1 }; } };
+  await assert.rejects(recordSourcePolicyReview(pool, {
+    source, automatedAccessStatus: "approved", reuseStatus: "conditional",
+    permittedMethods: [{ method: "GET", path: "/advertisements/", contentType: "application/pdf" }],
+    allowedHosts: ["recruitment.ssb.gov.in"], reviewerLabel: "founder",
+    reviewedAt: 1000, expiresAt: 5000, notes: "Approved by email"
+  }), /requires_evidence_expiry/);
 });
