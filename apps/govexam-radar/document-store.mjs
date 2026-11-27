@@ -40,6 +40,7 @@ export async function storePdf({ root, bytes } = {}) {
   await privateDirectory(directory);
 
   let handle;
+  let deduplicated = false;
   try {
     handle = await open(target, "wx", 0o600);
     await handle.writeFile(bytes);
@@ -52,6 +53,7 @@ export async function storePdf({ root, bytes } = {}) {
       await unlink(target).catch(() => {});
       throw error;
     }
+    deduplicated = true;
     const info = await lstat(target);
     if (!info.isFile() || info.isSymbolicLink() || (info.mode & 0o077) !== 0 || info.size !== bytes.length) {
       throw new Error("existing_document_file_invalid");
@@ -69,7 +71,7 @@ export async function storePdf({ root, bytes } = {}) {
     storageKey: hash.slice(0, 2) + "/" + hash + ".pdf",
     bytes: bytes.length,
     contentType: "application/pdf",
-    deduplicated: info.size === bytes.length
+    deduplicated
   });
 }
 
