@@ -104,9 +104,9 @@ function normalizeHistoryRow(raw,now){
  if(effectiveClose>today)return {error:'not_historical_yet'};
  const status=clean(field(raw,'positionOpeningStatus','PositionOpeningStatus'),120);
  if(/\b(accepting applications|currently open|receiving applications)\b/i.test(status))return {error:'status_conflicts_with_closed_date'};
- const locations=field(raw,'positionlocations','PositionLocations')??[];
- const hiring=field(raw,'hiringpaths','HiringPaths')??[];
- const categories=field(raw,'jobcategories','JobCategories')??[];
+ const locations=raw?.positionLocations??raw?.positionlocations??raw?.PositionLocations??[];
+ const hiring=raw?.hiringPaths??raw?.hiringpaths??raw?.HiringPaths??[];
+ const categories=raw?.jobCategories??raw?.jobcategories??raw?.JobCategories??[];
  const locs=Array.isArray(locations)?locations.slice(0,20).map(x=>({
   city:clean(field(x,'positionLocationCity','PositionLocationCity'),100),
   state:clean(field(x,'positionLocationState','PositionLocationState'),100),
@@ -151,7 +151,7 @@ export function parseUsajobsHistoricPage(body,now=Date.now()){
 async function boundedJson(url,fetcher,limit){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
  try{
-  const response=await fetcher(url.toString(),{method:'GET',redirect:'error',signal:controller.signal,headers:{Accept:'application/json'}});
+  const response=await fetcher(url.toString(),{method:'GET',redirect:'error',signal:controller.signal,headers:{Accept:'application/json','User-Agent':'globalGOV/2.8 (+https://github.com/solopreneursid/globalGOV)'}});
   if(response.status===429)throw new UpstreamError('upstream_rate_limited',503,response.headers.get('retry-after'));
   if(!response.ok)throw new UpstreamError('upstream_http_'+response.status,502);
   if(!(response.headers.get('content-type')||'').toLowerCase().includes('json'))throw new UpstreamError('upstream_content_type_invalid',502);
