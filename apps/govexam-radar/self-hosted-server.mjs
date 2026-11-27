@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { pathToFileURL } from "node:url";
 import worker from "./worker.js";
 import { createPostgresD1Database, createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { installDefaultCache } from "./memory-cache.mjs";
@@ -66,7 +67,8 @@ export function createNodeServer({
   workerImpl = worker,
   publicOrigin = process.env.PUBLIC_ORIGIN || "http://127.0.0.1:8080",
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
-  logger = console
+  logger = console,
+  env = process.env
 } = {}) {
   if (!db || typeof workerImpl?.fetch !== "function") throw new Error("server_dependencies_required");
   if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1024 || maxBodyBytes > 16 * 1024 * 1024) {
@@ -78,7 +80,7 @@ export function createNodeServer({
       origin.pathname !== "/" || origin.search || origin.hash) {
     throw new Error("invalid_public_origin");
   }
-  const env = createRuntimeEnvironment({ db });
+  const runtimeEnv = createRuntimeEnvironment({ db, env });
 
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = Date.now();
@@ -125,7 +127,7 @@ export function createNodeServer({
         ...(body === undefined ? {} : { body }),
         signal: controller.signal
       });
-      const response = await workerImpl.fetch(request, env);
+      const response = await workerImpl.fetch(request, runtimeEnv);
 
       outgoing.statusCode = response.status;
       for (const [name, value] of response.headers) {
@@ -190,7 +192,8 @@ export async function startServer({ env = process.env, workerImpl = worker, logg
       workerImpl,
       publicOrigin: env.PUBLIC_ORIGIN || "http://127.0.0.1:8080",
       maxBodyBytes: Number(env.MAX_REQUEST_BODY_BYTES || DEFAULT_MAX_BODY_BYTES),
-      logger
+      logger,
+      env
     });
 
     const port = Number(env.PORT || 8080);
@@ -229,7 +232,7 @@ async function main() {
   process.once("SIGTERM", shutdown);
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
     console.error(JSON.stringify({ event: "server_start_failed", error: String(error?.message || error) }));
     process.exitCode = 1;
