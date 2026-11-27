@@ -52,6 +52,23 @@ function reuseSeed(policy) {
   return "not_assessed";
 }
 
+export function mergeSourcePolicySources(...registries) {
+  const sources = new Map();
+  for (const registry of registries) {
+    if (!Array.isArray(registry)) throw new Error("source_policy_registry_invalid");
+    for (const source of registry) {
+      if (!source || typeof source.id !== "string" || !source.id ||
+          typeof source.url !== "string") throw new Error("source_policy_source_invalid");
+      const previous = sources.get(source.id);
+      if (previous && new URL(previous.url).hostname.toLowerCase() !== new URL(source.url).hostname.toLowerCase()) {
+        throw new Error("source_policy_source_host_conflict:" + source.id);
+      }
+      sources.set(source.id, source);
+    }
+  }
+  return [...sources.values()];
+}
+
 export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) {
   if (!pool || typeof pool.query !== "function" || !Array.isArray(sources) || !Number.isSafeInteger(now)) {
     throw new Error("source_policy_seed_inputs_invalid");
