@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerManualRecruitmentDocument } from "./source-document-collector.mjs";
+import { collectOfficialRecruitmentDocument, registerManualRecruitmentDocument } from "./source-document-collector.mjs";
 
 const pdf = Buffer.from("%PDF-1.7\nmanual evidence fixture\n%%EOF");
 function mockPool() {
@@ -52,6 +52,23 @@ test("manual intake rejects a PDF from a non-official host", async () => {
       bytes: pdf,
       pool: mockPool()
     }), /same_official_host/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("automated document collection refuses sources without an approved database policy", async () => {
+  const root = await mkdtemp(join(tmpdir(), "globalgov-doc-intake-"));
+  let fetchCalls = 0;
+  try {
+    await assert.rejects(collectOfficialRecruitmentDocument({
+      sourceId: "ssb-india-recruitment",
+      sourceUrl: "https://recruitment.ssb.gov.in/advertisements/notice.pdf",
+      root,
+      pool: { async query() { return { rows: [] }; } },
+      fetcher: async () => { fetchCalls += 1; return new Response("unexpected"); }
+    }), /source_automation_not_approved/);
+    assert.equal(fetchCalls, 0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
