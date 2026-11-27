@@ -11,6 +11,13 @@
     "uk-mirror:dry-run": "node uk-preview-sync.mjs --dry-run",
     "uk-mirror:apply": "node uk-preview-sync.mjs --apply",
     "uk-deploy:dry-run": "node uk-release-deploy.mjs --dry-run",
-    "uk-deploy:apply": "node uk-release-deploy.mjs --deploy"
+    "uk-deploy:apply": "node uk-release-deploy.mjs --deploy",
+    "start": "node self-hosted-server.mjs",
+    "start:scheduler": "node self-hosted-scheduler.mjs",
+    "db:migrate": "node self-hosted-migrate.mjs",
+    "test:self-hosted": "node --test postgres-d1.test.mjs memory-cache.test.mjs self-hosted-server.test.mjs self-hosted-scheduler.test.mjs"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
   }
 }
