@@ -31,6 +31,12 @@ export async function runPostgresRestoreTest({
   if (!selectedPath || !documentArchivePath) throw new Error("verified_backup_pair_not_found");
   const documentVerification = await verifyDocumentArchive({ archivePath: documentArchivePath, key });
 
+  const restoreUser = env.RESTORE_TEST_DB_USER || "";
+  const restorePassword = env.RESTORE_TEST_DB_PASSWORD || "";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(restoreUser) || !restorePassword) {
+    throw new Error("restore_test_role_credentials_required");
+  }
+  const restoreEnv = { ...env, PGUSER: restoreUser, PGPASSWORD: restorePassword };
   const restored = await decryptBackupForRestore({ backupPath: selectedPath, key });
   const database = "globalgov_restore_" + now().toString(36) + "_" + randomBytes(6).toString("hex");
   if (!IDENTIFIER.test(database)) {
