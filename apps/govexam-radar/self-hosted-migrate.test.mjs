@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyCoreMigration, applyMigrations, loadMigrations } from "./self-hosted-migrate.mjs";
+import { applyCoreMigration, applyMigrations, applyRuntimeRoleGrants, loadMigrations } from "./self-hosted-migrate.mjs";
 
 test("applies the legacy core migration and verifies its marker", async () => {
   const calls = [];
@@ -61,4 +61,27 @@ test("applies missing migrations and skips previously applied versions", async (
     { version: "001_core", status: "already_applied" },
     { version: "002_first_party_operations", status: "already_applied" }
   ]);
+});
+
+test("runtime role grants are skipped without explicit roles and use validated identifiers", async () => {
+  const calls = [];
+  const pool = { async query(sql) { calls.push(sql); return { rows: [], rowCount: 1 }; } };
+  assert.deepEqual(await applyRuntimeRoleGrants(pool, {}), {
+    status: "skipped", reason: "runtime_roles_not_configured"
+  });
+  const result = await applyRuntimeRoleGrants(pool, {
+    POSTGRES_USER: "globalgov_admin",
+    APP_DB_USER: "globalgov_app",
+    BACKUP_DB_USER: "globalgov_backup",
+    PGDATABASE: "globalgov"
+  });
+  assert.equal(result.status, "applied");
+  assert.ok(calls.some(sql => sql.includes("GRANT pg_read_all_data")));
+  assert.ok(calls.some(sql => sql.includes("ON TABLE backup_runs")));
+  await assert.rejects(applyRuntimeRoleGrants(pool, {
+    POSTGRES_USER: "globalgov_admin;DROP",
+    APP_DB_USER: "globalgov_app",
+    BACKUP_DB_USER: "globalgov_backup",
+    PGDATABASE: "globalgov"
+  }), /role_name_invalid/);
 });
