@@ -73,15 +73,18 @@ test("runtime role grants are skipped without explicit roles and use validated i
     POSTGRES_USER: "globalgov_admin",
     APP_DB_USER: "globalgov_app",
     BACKUP_DB_USER: "globalgov_backup",
+    RESTORE_TEST_DB_USER: "globalgov_restore_test",
     PGDATABASE: "globalgov"
   });
   assert.equal(result.status, "applied");
   assert.ok(calls.some(sql => sql.includes("GRANT pg_read_all_data")));
   assert.ok(calls.some(sql => sql.includes("ON TABLE backup_runs")));
+  assert.ok(calls.some(sql => sql.includes('CONNECT ON DATABASE "postgres"')));
   await assert.rejects(applyRuntimeRoleGrants(pool, {
     POSTGRES_USER: "globalgov_admin;DROP",
     APP_DB_USER: "globalgov_app",
     BACKUP_DB_USER: "globalgov_backup",
+    RESTORE_TEST_DB_USER: "globalgov_restore_test",
     PGDATABASE: "globalgov"
   }), /role_name_invalid/);
 });
