@@ -116,23 +116,27 @@ function resultMeta(result) {
 }
 
 class PostgresD1Statement {
-  constructor(database, sql, values = []) {
+  constructor(database, sql, values = null) {
     this.database = database;
+    this.originalSql = sql;
     const translated = translateD1Sql(sql);
     this.sql = translated.sql;
     this.parameterCount = translated.parameterCount;
     this.values = values;
-    if (values.length !== this.parameterCount) {
+    this.bound = values !== null;
+    if (this.bound && values.length !== this.parameterCount) {
       throw new Error("sql_parameter_count_mismatch");
     }
   }
 
   bind(...values) {
-    return new PostgresD1Statement(this.database, this.originalSql || this.sql, values);
+    return new PostgresD1Statement(this.database, this.originalSql, values);
   }
 
   async execute(client = this.database.pool) {
-    return client.query(this.sql, this.values.map(value => value === undefined ? null : value));
+    if (!this.bound && this.parameterCount !== 0) throw new Error("sql_parameters_not_bound");
+    const values = this.values || [];
+    return client.query(this.sql, values.map(value => value === undefined ? null : value));
   }
 
   async first(columnName) {
@@ -162,9 +166,7 @@ export class PostgresD1Database {
   }
 
   prepare(sql) {
-    const statement = new PostgresD1Statement(this, sql);
-    statement.originalSql = sql;
-    return statement;
+    return new PostgresD1Statement(this, sql);
   }
 
   async batch(statements) {
