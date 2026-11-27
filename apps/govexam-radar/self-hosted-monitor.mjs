@@ -175,6 +175,37 @@ export async function inspectSelfHostedHealth({
     checks.push(issue("sources", "warning", "source_ingestion_ledger_unavailable"));
   }
 
+  try {
+    const failures = await pool.query(
+      "SELECT source_id,state,error_code FROM source_connector_runs " +
+      "WHERE state IN ('error','rejected') AND started_at >= $1 ORDER BY started_at DESC LIMIT 20",
+      [timestamp - 86400000]
+    );
+    if (failures.rows.length) {
+      checks.push(issue("source_connectors", "warning", "source_connector_failures_observed", {
+        count: failures.rows.length,
+        sources: [...new Set(failures.rows.map(row => row.source_id))].slice(0, 20)
+      }));
+    }
+  } catch {
+    checks.push(issue("source_connectors", "warning", "source_connector_ledger_unavailable"));
+  }
+
+  try {
+    const expired = await pool.query(
+      "SELECT source_id FROM source_policy_reviews WHERE automated_access_status='approved' " +
+      "AND expires_at IS NOT NULL AND expires_at <= $1 LIMIT 20",
+      [timestamp]
+    );
+    if (expired.rows.length) {
+      checks.push(issue("source_policy", "warning", "source_policy_approval_expired", {
+        sources: expired.rows.map(row => row.source_id)
+      }));
+    }
+  } catch {
+    checks.push(issue("source_policy", "warning", "source_policy_ledger_unavailable"));
+  }
+
   await checkDisk(env.DOCUMENT_STORE_DIR || "/var/lib/globalgov/documents", "document_storage", statfsFn, checks);
   await checkDisk(env.BACKUP_DIR || "/var/lib/globalgov/backups", "backup_storage", statfsFn, checks);
   return { checkedAt: timestamp, checks };
