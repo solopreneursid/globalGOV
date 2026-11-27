@@ -52,23 +52,6 @@ function reuseSeed(policy) {
   return "not_assessed";
 }
 
-export function mergeSourcePolicySources(...registries) {
-  const sources = new Map();
-  for (const registry of registries) {
-    if (!Array.isArray(registry)) throw new Error("source_policy_registry_invalid");
-    for (const source of registry) {
-      if (!source || typeof source.id !== "string" || !source.id ||
-          typeof source.url !== "string") throw new Error("source_policy_source_invalid");
-      const previous = sources.get(source.id);
-      if (previous && new URL(previous.url).hostname.toLowerCase() !== new URL(source.url).hostname.toLowerCase()) {
-        throw new Error("source_policy_source_host_conflict:" + source.id);
-      }
-      sources.set(source.id, source);
-    }
-  }
-  return [...sources.values()];
-}
-
 export function mergeSourcePolicySources(directorySources, adapterSources = []) {
   if (!Array.isArray(directorySources) || !Array.isArray(adapterSources)) {
     throw new Error("source_policy_merge_inputs_invalid");
@@ -136,7 +119,7 @@ export async function getApprovedSourcePolicy(pool, source, now = Date.now()) {
   }
   const result = await pool.query(
     `SELECT automated_access_status,reuse_status,permitted_methods,allowed_hosts,
-      policy_url,reviewed_at,expires_at,reviewer_label
+      policy_url,reviewed_at,expires_at,reviewer_label,notes
      FROM source_policy_reviews WHERE source_id=$1`,
     [source.id]
   );
