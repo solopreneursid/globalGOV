@@ -8,9 +8,10 @@ This directory is the owner-operated deployment target for globalGOV Option B.
 
 1. Export every relevant D1 database and any populated local SQLite evidence database.
 2. Keep immutable copies of the exports and record their SHA-256 hashes.
-3. Compare the actual D1 schema with `postgres/001_core.sql`; the target schema is derived from repository migrations and queries, not yet reconciled against a complete D1 export.
-4. Restore the exports into an isolated test environment before importing into the target PostgreSQL database.
-5. Never point this schema at production data or delete the source databases during the initial migration.
+3. Run the existing `node apps/govexam-radar/d1-export-backup.mjs encrypt PRIVATE.sql PRIVATE_DIR/backup.enc` offline after exporting the D1 SQL. It validates the 12 required canonical tables and encrypts the export; it does not contact Cloudflare or import PostgreSQL data.
+4. Compare the actual D1 schema with `postgres/001_core.sql`; the target schema is derived from repository migrations and queries, not yet reconciled against a complete D1 export.
+5. Restore the exports into an isolated test environment before importing into the target PostgreSQL database.
+6. Never point this schema at production data or delete the source databases during the initial migration.
 
 ## Host sizing
 
