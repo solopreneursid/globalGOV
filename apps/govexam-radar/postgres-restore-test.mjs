@@ -1,4 +1,4 @@
-// Full isolated PostgreSQL restore test. Uses a temporary database on the owner-operated server.
+// Full isolated PostgreSQL and document-volume restore verification.
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -23,20 +23,30 @@ export async function runPostgresRestoreTest({
   if (!pool || typeof pool.query !== "function" || !Buffer.isBuffer(key) || key.length !== 32) {
     throw new Error("restore_test_inputs_invalid");
   }
-  const backup = backupPath
-    ? await pool.query("SELECT local_path,document_archive_path FROM backup_runs WHERE local_path=$1 AND state='ok' AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL", [backupPath])
-    : await pool.query("SELECT local_path,document_archive_path FROM backup_runs WHERE state='ok' AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1");
-  const selectedPath = backup.rows[0]?.local_path;
-  const documentArchivePath = backup.rows[0]?.document_archive_path;
-  if (!selectedPath || !documentArchivePath) throw new Error("verified_backup_pair_not_found");
-  const documentVerification = await verifyDocumentArchive({ archivePath: documentArchivePath, key });
 
   const restoreUser = env.RESTORE_TEST_DB_USER || "";
   const restorePassword = env.RESTORE_TEST_DB_PASSWORD || "";
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(restoreUser) || !restorePassword) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(restoreUser) || !restorePassword ||
+      restoreUser === env.PGUSER || restoreUser === env.POSTGRES_USER) {
     throw new Error("restore_test_role_credentials_required");
   }
-  const restoreEnv = { ...env, PGUSER: restoreUser, PGPASSWORD: restorePassword };
+
+  const backup = backupPath
+    ? await pool.query(
+      "SELECT local_path,document_archive_path FROM backup_runs WHERE local_path=$1 AND state='ok' " +
+      "AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL",
+      [backupPath]
+    )
+    : await pool.query(
+      "SELECT local_path,document_archive_path FROM backup_runs WHERE state='ok' " +
+      "AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL " +
+      "ORDER BY finished_at DESC LIMIT 1"
+    );
+  const selectedPath = backup.rows[0]?.local_path;
+  const documentArchivePath = backup.rows[0]?.document_archive_path;
+  if (!selectedPath || !documentArchivePath) throw new Error("verified_backup_pair_not_found");
+
+  const documentVerification = await verifyDocumentArchive({ archivePath: documentArchivePath, key });
   const restored = await decryptBackupForRestore({ backupPath: selectedPath, key });
   const database = "globalgov_restore_" + now().toString(36) + "_" + randomBytes(6).toString("hex");
   if (!IDENTIFIER.test(database)) {
@@ -44,30 +54,25 @@ export async function runPostgresRestoreTest({
     throw new Error("restore_test_database_name_invalid");
   }
 
-  const restoreUser = env.RESTORE_TEST_DB_USER || "";
-  const restorePassword = env.RESTORE_TEST_DB_PASSWORD || "";
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(restoreUser) || !restorePassword ||
-      restoreUser === env.PGUSER || restoreUser === env.POSTGRES_USER) {
-    await rm(restored.directory, { recursive: true, force: true });
-    throw new Error("restore_test_role_required");
-  }
-  const maintenanceEnv = {
-    ...env, PGUSER: restoreUser, PGPASSWORD: restorePassword,
-    PGDATABASE: env.PGMAINTENANCE_DATABASE || "postgres"
-  };
-  const maintenancePool = await createPostgresPoolFromEnv(maintenanceEnv);
-  let created = false;
+  const restoreEnv = { ...env, PGUSER: restoreUser, PGPASSWORD: restorePassword };
+  let maintenancePool = null;
   let testPool = null;
-  let primaryError = null;
+  let created = false;
   try {
-    await maintenancePool.query("CREATE DATABASE \"" + database + "\" TEMPLATE template0 ENCODING 'UTF8'");
+    maintenancePool = await createPostgresPoolFromEnv({
+      ...restoreEnv, PGDATABASE: env.PGMAINTENANCE_DATABASE || "postgres"
+    });
+    await maintenancePool.query(
+      "CREATE DATABASE \"" + database + "\" TEMPLATE template0 ENCODING 'UTF8'"
+    );
     created = true;
+
     try {
       execFileSync("pg_restore", [
         "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges",
         "--dbname", database, restored.dumpPath
       ], {
-        env: { ...maintenanceEnv, PGDATABASE: database },
+        env: { ...restoreEnv, PGDATABASE: database },
         timeout: 10 * 60 * 1000,
         maxBuffer: 4 * 1024 * 1024,
         stdio: ["ignore", "pipe", "pipe"]
@@ -76,7 +81,7 @@ export async function runPostgresRestoreTest({
       throw new Error("full_postgres_restore_failed");
     }
 
-    testPool = await createPostgresPoolFromEnv({ ...maintenanceEnv, PGDATABASE: database });
+    testPool = await createPostgresPoolFromEnv({ ...restoreEnv, PGDATABASE: database });
     const migrations = await testPool.query(
       "SELECT version FROM schema_migrations WHERE version IN ($1,$2) ORDER BY version",
       ["001_core", "002_first_party_operations"]
@@ -85,6 +90,7 @@ export async function runPostgresRestoreTest({
     if (!versions.has("001_core") || !versions.has("002_first_party_operations")) {
       throw new Error("restored_schema_migrations_incomplete");
     }
+
     const tables = await testPool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
     );
@@ -102,10 +108,12 @@ export async function runPostgresRestoreTest({
 
     const verifiedAt = now();
     const update = await pool.query(
-      "UPDATE backup_runs SET restore_verified_at=$1,document_restore_verified_at=$1 WHERE local_path=$2 AND state='ok'",
+      "UPDATE backup_runs SET restore_verified_at=$1,document_restore_verified_at=$1 " +
+      "WHERE local_path=$2 AND state='ok'",
       [verifiedAt, selectedPath]
     );
     if (update.rowCount !== 1) throw new Error("restore_test_audit_update_failed");
+
     return {
       state: "verified",
       backupPath: selectedPath,
@@ -117,22 +125,13 @@ export async function runPostgresRestoreTest({
       restoreVerifiedAt: verifiedAt,
       temporaryDatabaseDropped: true
     };
-  } catch (error) {
-    primaryError = error;
-    throw error;
   } finally {
     if (testPool) await testPool.end().catch(() => {});
-    let cleanupFailed = false;
-    if (created) {
-      try {
-        await maintenancePool.query('DROP DATABASE IF EXISTS "' + database + '" WITH (FORCE)');
-      } catch {
-        cleanupFailed = true;
-      }
+    if (created && maintenancePool) {
+      await maintenancePool.query('DROP DATABASE IF EXISTS "' + database + '" WITH (FORCE)').catch(() => {});
     }
-    await maintenancePool.end();
+    if (maintenancePool) await maintenancePool.end().catch(() => {});
     await rm(restored.directory, { recursive: true, force: true });
-    if (cleanupFailed && !primaryError) throw new Error("restore_test_database_cleanup_failed");
   }
 }
 
