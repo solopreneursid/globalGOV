@@ -88,13 +88,39 @@ export async function applyCoreMigration(pool, schemaSql) {
   return { version: "001_core", status: "applied" };
 }
 
+export async function applyRuntimeRoleGrants(pool, env = process.env) {
+  const adminUser = env.POSTGRES_USER || env.PGUSER || "";
+  const appUser = env.APP_DB_USER || "";
+  const backupUser = env.BACKUP_DB_USER || "";
+  if (!adminUser || !appUser || !backupUser) return { status: "skipped", reason: "runtime_roles_not_configured" };
+  const valid = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  if (![adminUser, appUser, backupUser].every(name => valid.test(name)) ||
+      new Set([adminUser, appUser, backupUser]).size !== 3) {
+    throw new Error("postgres_runtime_role_name_invalid");
+  }
+  const quote = name => '"' + name + '"';
+  await pool.query("GRANT CONNECT ON DATABASE " + quote(env.PGDATABASE || "") +
+    " TO " + quote(appUser) + "," + quote(backupUser));
+  await pool.query("GRANT USAGE ON SCHEMA public TO " + quote(appUser) + "," + quote(backupUser));
+  await pool.query("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO " + quote(appUser));
+  await pool.query("GRANT USAGE,SELECT,UPDATE ON ALL SEQUENCES IN SCHEMA public TO " + quote(appUser));
+  await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
+    " IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO " + quote(appUser));
+  await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
+    " IN SCHEMA public GRANT USAGE,SELECT,UPDATE ON SEQUENCES TO " + quote(appUser));
+  await pool.query("GRANT pg_read_all_data TO " + quote(backupUser));
+  await pool.query("GRANT SELECT,INSERT,UPDATE ON TABLE backup_runs TO " + quote(backupUser));
+  return { status: "applied", appRole: appUser, backupRole: backupUser };
+}
+
 async function main() {
   const directory = await resolveMigrationDirectory();
   const migrations = await loadMigrations(directory);
   const pool = await createPostgresPoolFromEnv();
   try {
     const results = await applyMigrations(pool, migrations);
-    console.log(JSON.stringify({ status: "ok", directory: String(directory), migrations: results }));
+    const roleGrants = await applyRuntimeRoleGrants(pool, process.env);
+    console.log(JSON.stringify({ status: "ok", directory: String(directory), migrations: results, roleGrants }));
   } finally {
     await pool.end();
   }
