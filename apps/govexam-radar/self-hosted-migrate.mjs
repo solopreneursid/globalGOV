@@ -1,8 +1,8 @@
 import { readFile, access, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
 const MIGRATION_VERSION = /^([0-9]{3}_[a-z0-9_]+)\.sql$/;
 
@@ -15,7 +15,7 @@ export async function resolveMigrationDirectory() {
   for (const candidate of candidates) {
     try {
       await access(new URL("001_core.sql", candidate), constants.R_OK);
-      return candidate;
+      return fileURLToPath(candidate);
     } catch {
       // Try the next known repository/container location.
     }
