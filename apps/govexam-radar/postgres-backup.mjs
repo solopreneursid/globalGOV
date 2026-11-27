@@ -3,11 +3,13 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { spawn, execFileSync } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
 import { appendFile, mkdir, lstat, readdir, unlink, rename, open, chmod } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 const MAGIC = Buffer.from("GLOBALGOV-PG-BACKUP-1\n");
 const TAG_BYTES = 16;
@@ -158,14 +160,13 @@ async function decryptToTemporaryFile(backupPath, key, directory) {
 
 export async function verifyPostgresBackup({ backupPath, key, pgRestoreCommand = "pg_restore" } = {}) {
   assertKey(key);
-  const directory = await import("node:fs/promises").then(({ mkdtemp }) => mkdtemp(join(resolve(backupPath, ".."), ".globalgov-restore-")));
+  const directory = await mkdtemp(join(dirname(resolve(backupPath)), ".globalgov-restore-"));
   try {
     const dumpPath = await decryptToTemporaryFile(backupPath, key, directory);
     const listing = runCommand(pgRestoreCommand, ["--list", dumpPath]);
     if (!listing.includes("TABLE DATA") && !listing.includes("TABLE")) throw new Error("postgres_archive_empty");
     return { verified: true, archiveEntries: listing.split("\n").filter(Boolean).length };
   } finally {
-    const { rm } = await import("node:fs/promises");
     await rm(directory, { recursive: true, force: true });
   }
 }
