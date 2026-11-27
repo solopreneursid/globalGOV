@@ -57,7 +57,7 @@ export function extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes,tex
    const line=original.trim().replace(/[ \t]+/g,' ');
    if(!line||line.length>1000)continue;
    for(const [key,regex] of Object.entries(labels)){
-    const match=regex.exec(line);if(!match)continue;
+    const match=regex.exec(line)||(key==='advertisement'?/^(?:No\.\s*)?(SDSC SHAR\/RMT\/\d{2}\/20\d{2})\s*$/i.exec(line):null);if(!match)continue;
     const raw=match[1].trim();if(!raw||raw.length>500)continue;
     const value=['opening','closing','examDate','ageCutoff'].includes(key)?indiaCalendarDate(raw):key==='vacancies'?(/^[1-9]\d{0,5}$/.test(raw)?Number(raw):null):raw;
     (candidates[key]??=[]).push({value,raw,page:pi+1,line:li+1});

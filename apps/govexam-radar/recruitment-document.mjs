@@ -26,7 +26,7 @@ export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch){
 }
 export function extractPdfText(bytes){
  if(!Buffer.isBuffer(bytes)||bytes.length>MAX||bytes.subarray(0,5).toString()!=='%PDF-')throw Error('invalid_pdf');
- try{return execFileSync('pdftotext',['-layout','-enc','UTF-8','-f','1','-l','100','-','-'],{input:bytes,encoding:'utf8',timeout:15000,maxBuffer:2*1024*1024,stdio:['pipe','pipe','pipe']});}
+ try{const info=execFileSync('pdfinfo',['-'],{input:bytes,encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['pipe','pipe','pipe']});const pages=Number(/^Pages:\s+(\d+)\s*$/m.exec(info)?.[1]);if(!Number.isSafeInteger(pages)||pages<1||pages>100)throw Error('pdf_page_limit');return execFileSync('pdftotext',['-layout','-enc','UTF-8','-f','1','-l','100','-','-'],{input:bytes,encoding:'utf8',timeout:15000,maxBuffer:2*1024*1024,stdio:['pipe','pipe','pipe']});}
  catch{throw Error('pdf_text_extraction_failed_or_unsupported');}
 }
 async function main(){

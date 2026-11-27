@@ -1,0 +1,43 @@
+name: globalGOV document evidence checks
+on:
+  pull_request:
+    paths:
+      - 'apps/govexam-radar/recruitment-*.mjs'
+      - 'apps/govexam-radar/encrypted-backup*.mjs'
+      - '.github/workflows/globalgov-document-evidence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/govexam-radar/recruitment-*.mjs'
+      - 'apps/govexam-radar/encrypted-backup*.mjs'
+      - '.github/workflows/globalgov-document-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify extraction, source boundaries, eligibility and encrypted restore
+        run: node --test apps/govexam-radar/recruitment-evidence.test.mjs apps/govexam-radar/encrypted-backup.test.mjs
+  source-probe:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Poppler
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils
+      - name: Probe official historical SDSC notice (private temporary output)
+        run: |
+          dir=$(mktemp -d)
+          trap 'rm -rf "$dir"' EXIT
+          node apps/govexam-radar/recruitment-document.mjs india-sdsc-shar 'https://apps.shar.gov.in/sdscshar/advt_03_2026/Notice%20dated%2013.11.2026.pdf' --fetch - "$dir/review.json"
