@@ -119,7 +119,8 @@ async function main() {
     const env = {
       DB: db,
       USAJOBS_FETCH: fetch,
-      ...(process.env.INGEST_HMAC_KEY ? { INGEST_HMAC_KEY: process.env.INGEST_HMAC_KEY } : {})
+      ...(process.env.INGEST_HMAC_KEY ? { INGEST_HMAC_KEY: process.env.INGEST_HMAC_KEY } : {}),
+      ...(process.env.SSB_AUTOMATED_ACCESS_APPROVED ? { SSB_AUTOMATED_ACCESS_APPROVED: process.env.SSB_AUTOMATED_ACCESS_APPROVED } : {})
     };
     const scheduler = createScheduler({ db, env });
     await scheduler.start();
