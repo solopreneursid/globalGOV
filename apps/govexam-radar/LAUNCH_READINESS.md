@@ -41,3 +41,6 @@ The staging Worker remains separate from production. Use the repository's guarde
 
 ## India multi-authority extension (26 November 2026)
 SSB's official recruitment advertisement table is a second India adapter. Website policy permits accurate attributed first-party reproduction; automated reads stop on restrictions. Public display requires two independent complete native scheduled snapshots, each source's own gate, a current Indian calendar date window and exact SSB advertisement reference. Use the official advertisement table link, not a fabricated application endpoint. No live notices are promised until source checks succeed. Existing UK-only scope stays restricted; no new Worker or database is required.
+
+## Operational consolidation (2026-11-27)
+Canonical full staging is the only active application target. The separate legacy previews and private UK mirror are designated for reversible retirement; retain code and data for recovery, not public use. Scheduled hosted checks and an independent GitHub-hosted source-health check cover the canonical application. Workflow failure/report visibility is available in Actions; external incident notification delivery and off-site backups still require separate verification. See INDIA_SOURCE_ONBOARDING.md for current authority rights decisions.

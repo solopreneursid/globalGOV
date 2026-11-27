@@ -6,3 +6,5 @@
 - Ingest only verified official government sources within their permitted use. Never fabricate notices or imply unsupported coverage.
 - Preserve release gates; verify tests, live preview, data isolation, source rights and rollback before any production activation. Do not migrate secrets into Git.
 - Do not modify YorpHives, YorpHives HQ, Taxpulse or unrelated infrastructure. Keep operating costs minimal.
+
+- Only the canonical full application Worker `hqventures-govexam-parity-preview` may be updated for staging development. The old initial and UK-only previews and their mirror are retired targets, not separate products. Do not reactivate them or delete retained recovery data without a separate decision.

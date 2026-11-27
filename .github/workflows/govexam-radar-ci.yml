@@ -50,16 +50,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check independent Cloudflare deployment
+      - name: Check canonical Cloudflare staging deployment
         run: |
-          curl --fail --show-error --silent --max-time 25 --retry 2 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/api/health | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.status!=="ok"||d.service!=="hqventures-govradar")process.exit(1);console.log("Cloudflare health verified",d.version);})'
           curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/health | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.status!=="ok"||d.version!=="2.7.0-preview")process.exit(1);console.log("Full-parity preview health verified",d.version);})'
           curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/source-status | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.total!==60||!Array.isArray(d.sources)||d.verifiedVacancies!==0)process.exit(1);console.log("Scheduled status catalog verified",d.total);})'
           curl --fail --show-error --silent --max-time 25 --retry 1 "https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/check?id=upsc" | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.sourceId!=="upsc"||!["reachable","restricted","unconfirmed"].includes(d.status))process.exit(1);console.log("Real on-demand source check:",d.status);})'
           curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev/api/source-status | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.total!==60||d.checkedSources<1)process.exit(1);console.log("Persisted source check evidence:",d.checkedSources);})'
-          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/api/catalog | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.sources.length!==17||d.verifiedListings.length!==0)process.exit(1);console.log("Cloudflare catalog verified",d.sources.length);})'
-          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/full.css | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{if(s.length<20000||!s.includes(".bg-indigo-600"))process.exit(1);console.log("Self-hosted production CSS verified",s.length);})'
-          curl --fail --show-error --silent --max-time 25 https://hqventures-govexam-radar.solopreneursid-proy.workers.dev/ | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{if(!s.includes("Research Preview")||!s.includes("/enhance.js"))process.exit(1);console.log("Six-tab full release HTML verified");})'
 
       - name: Verify simplified staging preview
         run: |
@@ -106,7 +102,7 @@ jobs:
           console.log('Source rights, India checks, Australia filter, privacy and paused community verified');
           NODE
 
-      - name: Verify deployed UK-only release candidate and server-side source isolation
+      - name: Verify legacy API scope restriction on canonical staging
         run: |
           node --input-type=module <<'NODE'
           const origin='https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev';
@@ -168,51 +164,4 @@ jobs:
       - name: Read-only ISRO access and robots probe
         continue-on-error: true
         run: node apps/govexam-radar/probe-isro.mjs
-
-      - name: Verify independent UK-only Worker and data-isolated staging deployment
-        run: |
-          node --input-type=module <<'NODE'
-          const origin='https://hqventures-govradar-uk-isolated-preview.solopreneursid-proy.workers.dev';
-          const paths=['/','/api/notices?limit=50','/api/notices?country=Canada',
-            '/api/notices?source=manitoba-jobs','/api/collector/plan',
-            '/api/community/posts','/api/moderation/reports','/openapi.json','/robots.txt',
-            '/release-preview.css','/release-preview.js'];
-          const responses=await Promise.all(paths.map(async path=>[path,await fetch(origin+path)]));
-          const dict=Object.fromEntries(responses);
-          const ok=(path,status)=>{if(dict[path]?.status!==status)throw Error(path+' returned '+dict[path]?.status+', expected '+status);};
-          for(const path of ['/','/api/notices?limit=50','/api/notices?country=Canada','/openapi.json','/robots.txt','/release-preview.css','/release-preview.js'])ok(path,200);
-          ok('/api/notices?source=manitoba-jobs',403);
-          for(const path of ['/api/collector/plan','/api/community/posts','/api/moderation/reports'])ok(path,404);
-          const landing=await dict['/'].text();
-          if(!landing.includes('RELEASE CANDIDATE · STAGING ONLY')||!landing.includes('OFFICIAL-SOURCE SNAPSHOT')||
-             !landing.includes('id="preview-grid"')||
-             !dict['/'].headers.get('x-robots-tag')?.includes('noindex'))
-            throw Error('Noindex staging landing contract invalid');
-          const data=await dict['/api/notices?limit=50'].json();
-          if(data.releaseProfile!=='uk_only_release_preview'||data.publicLaunchAuthorized!==false||
-             !Array.isArray(data.sources)||data.sources.length!==1||
-             data.sources[0]?.id!=='uk-dfe-teaching-vacancies'||
-             !Number.isSafeInteger(data.total)||data.total<1||
-             !Array.isArray(data.notices)||data.notices.some(x=>x.sourceId!=='uk-dfe-teaching-vacancies'))
-            throw Error('Isolated UK data protection failure');
-          const canada=await dict['/api/notices?country=Canada'].json();
-          if(canada.notices.length!==0||canada.total!==0)throw Error('Unexpected non-UK rows');
-          const api=await dict['/openapi.json'].json();
-          if(JSON.stringify(Object.keys(api.paths).sort())!==JSON.stringify(['/api/freshness','/api/health','/api/notices']))
-            throw Error('Extra routes exposed in OpenAPI');
-          const denied=await fetch(origin+'/api/collector/ingest',{method:'POST',body:'{}'});
-          if(denied.status!==405)throw Error('Write method unexpectedly accepted');
-          const freshnessResponse=await fetch(origin+'/api/freshness',{cache:'no-store'});
-          if(freshnessResponse.status!==200||freshnessResponse.headers.get('cache-control')!=='no-store')
-            throw Error('UK mirror freshness endpoint unavailable');
-          const freshness=await freshnessResponse.json();
-          if(!['pending','current','delayed','unavailable'].includes(freshness.status)||
-             typeof freshness.fresh!=='boolean'||freshness.publicLaunchAuthorized!==false||
-             JSON.stringify(freshness).includes('database_id')||JSON.stringify(freshness).includes('error_code'))
-            throw Error('UK mirror freshness disclosure unsafe');
-          const script=await dict['/release-preview.js'].text();
-          if(!script.includes('/api/freshness')||!landing.includes('id="preview-freshness"'))
-            throw Error('UK mirror freshness not visible in preview');
-          console.log('UK-only isolated Worker verified: UK notices',data.total,'freshness',freshness.status,'zero write/research routes');
-          NODE
 

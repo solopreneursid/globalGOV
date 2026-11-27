@@ -6,6 +6,8 @@ on:
       - 'apps/govexam-radar/**'
       - '.github/workflows/globalgov-hosted.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '12 */3 * * *'
 permissions:
   contents: read
 jobs:
@@ -52,24 +54,12 @@ jobs:
           const denied=await (await get('/api/notices?source=manitoba-jobs',403)).json();
           assert.equal(denied.error,'source_not_approved_for_release_preview');
           console.log('Hosted globalGOV branding, scripts, noindex, health and source boundaries verified');
-          const ukBase='https://hqventures-govradar-uk-isolated-preview.solopreneursid-proy.workers.dev';
-          async function getUK(path,status=200){
-            const r=await fetch(ukBase+path,{cache:'no-store',signal:AbortSignal.timeout(25000)});
-            assert.equal(r.status,status,path);
-            assert.match(r.headers.get('x-robots-tag')||'',/noindex/i,path);
-            return r;
+          const status=await (await get('/api/ingestion-status')).json();
+          for(const id of ['india-isro-opportunities','india-ssb-recruitment']){
+            const gate=all.indiaSourceChecks?.[id];
+            assert.equal(typeof gate?.ready,'boolean',id);
+            assert.equal(typeof status.indiaSourceChecks?.[id]?.ready,'boolean',id);
+            if(!gate.ready)assert.ok(all.notices.every(n=>n.sourceId!==id),id);
           }
-          const ukHealth=await (await getUK('/api/health')).json();
-          assert.equal(ukHealth.status,'ok');
-          assert.equal(ukHealth.publicLaunchAuthorized,false);
-          assert.match(await (await getUK('/')).text(),/globalGOV/);
-          const ukFeed=await (await getUK('/api/notices?limit=30')).json();
-          assert.equal(ukFeed.releaseProfile,'uk_only_release_preview');
-          assert.equal(ukFeed.publicLaunchAuthorized,false);
-          assert.ok(ukFeed.notices.every(n=>n.sourceId==='uk-dfe-teaching-vacancies'));
-          await getUK('/api/notices?source=manitoba-jobs',403);
-          await getUK('/api/moderation',404);
-          await getUK('/api/freshness');
-          new Function(await (await getUK('/release-preview.js')).text());
-          console.log('Independent UK-only staging, rights boundary and noindex verified');
+          console.log('Both independent India source gates verified on the canonical application');
           NODE

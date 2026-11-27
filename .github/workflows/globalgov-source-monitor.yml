@@ -1,0 +1,38 @@
+name: globalGOV independent source health monitor
+on:
+  schedule:
+    - cron: '10 2,8,14,20 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: globalgov-independent-monitor
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check canonical service and live source freshness
+        shell: bash
+        run: |
+          set +e
+          node apps/govexam-radar/launch-monitor.mjs https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev > globalgov-monitor.json
+          result=$?
+          cat globalgov-monitor.json
+          printf '### Independent globalGOV monitor\n\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+          cat globalgov-monitor.json >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Preserve check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: globalgov-monitor-report
+          path: globalgov-monitor.json
+          retention-days: 14
+          if-no-files-found: error

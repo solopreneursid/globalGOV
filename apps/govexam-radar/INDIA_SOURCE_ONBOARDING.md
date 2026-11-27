@@ -1,0 +1,20 @@
+# Indian authority onboarding register — 2026-11-27
+
+Status is source-specific; a public URL or a government domain does not itself grant reuse permission. No new authority may publish until its exact access rules, source rights, schema, current dates and native run evidence are checked.
+
+| Authority | Official notice / policy references | Current decision | Next engineering action |
+|---|---|---|---|
+| ISRO | https://www.isro.gov.in/ViewAllOpportunities.html ; https://www.isro.gov.in/Website_Policy.html | Conditional first-party reuse; native collector running; no eligible notices in latest checked snapshot | Inspect field-level exclusion reasons; preserve ownership and date filters |
+| SSB | https://recruitment.ssb.gov.in/adv_newsUrl ; https://recruitment.ssb.gov.in/websitepolicyUrl | Conditional first-party reuse; adapter merged and staging active; native evidence pending | Run read-only actual parser probe, observe two independent scheduled snapshots |
+| UPSC | https://www.upsc.gov.in/advertisements/ ; https://upsc.gov.in/website-policies/ | Permission required for reproduction; direct linking allowed, authority requests notification of links | Obtain source-specific permission or use a separately licensed official dataset; parse per-post deadlines rather than upload dates |
+| SSC | https://ssc.gov.in/ | Notice board available; applicable reuse and permitted automated access not established | Inspect current policy and sanctioned feed; keep directory-only |
+| RRB Chandigarh | https://www.rrbcdg.gov.in/employment-notices.php | Official recruitment index; site-specific reuse not established | Audit each RRB and authoritative CEN documents; preserve source-specific rights |
+| IBPS | https://www.ibps.in/index.php/crp-updates/ ; https://www.ibps.in/index.php/policies-rules-guidelines/ | Public updates; proprietary-rights cautions; no blanket republication permission established | Clarify minimal metadata rights and identify official allowed feed; directory-only |
+| DRDO | https://drdo.gov.in/drdo/offerings/vacancies ; https://drdo.gov.in/drdo/en/copyright-policy | Structured dates, but permission required for republication | Request permission; exclude non-recruitment outcomes and third-party ads |
+| Department of Expenditure | https://doe.gov.in/en/vacancies ; https://doe.gov.in/en/website-policies | Conditional reuse policy; listing contains publication dates, not explicit closing dates | Investigate permitted official document extraction, distinguish recruitment from outcomes, do not infer deadlines |
+| IP India | https://ipindia.gov.in/career ; https://ipindia.gov.in/copyright-policy ; https://ipindia.gov.in/ | General reuse policy with a more recent commercial-use warning; not approved | Reconcile notice and policy; obtain clarification |
+| State PSCs | existing official-source directory | source-by-source decisions pending | Prioritize structured current notices and locally applicable policies |
+
+## Production gate
+
+For every candidate retain source URL, policy URL/date, fields permitted, explicit first-party scope, robots/access result, date semantics, parser fixtures, approval decision, and independent native audit evidence. No fabricated vacancies or guessed deadlines. Links remain useful where source reuse is blocked. Source permission requests have not been sent.
