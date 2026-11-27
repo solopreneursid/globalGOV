@@ -6,6 +6,7 @@ import { rm } from "node:fs/promises";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { decodeBackupKey } from "./encrypted-backup.mjs";
 import { decryptBackupForRestore } from "./postgres-backup.mjs";
+import { verifyDocumentArchive } from "./document-backup.mjs";
 
 const REQUIRED_TABLES = Object.freeze([
   "schema_migrations", "members", "official_job_notices", "source_ingest_runs",
@@ -23,10 +24,12 @@ export async function runPostgresRestoreTest({
     throw new Error("restore_test_inputs_invalid");
   }
   const backup = backupPath
-    ? await pool.query("SELECT local_path FROM backup_runs WHERE local_path=$1 AND state='ok' AND archive_verified_at IS NOT NULL", [backupPath])
-    : await pool.query("SELECT local_path FROM backup_runs WHERE state='ok' AND archive_verified_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1");
+    ? await pool.query("SELECT local_path,document_archive_path FROM backup_runs WHERE local_path=$1 AND state='ok' AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL", [backupPath])
+    : await pool.query("SELECT local_path,document_archive_path FROM backup_runs WHERE state='ok' AND archive_verified_at IS NOT NULL AND document_archive_verified_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1");
   const selectedPath = backup.rows[0]?.local_path;
-  if (!selectedPath) throw new Error("verified_backup_not_found");
+  const documentArchivePath = backup.rows[0]?.document_archive_path;
+  if (!selectedPath || !documentArchivePath) throw new Error("verified_backup_pair_not_found");
+  const documentVerification = await verifyDocumentArchive({ archivePath: documentArchivePath, key });
 
   const restored = await decryptBackupForRestore({ backupPath: selectedPath, key });
   const database = "globalgov_restore_" + now().toString(36) + "_" + randomBytes(6).toString("hex");
@@ -82,7 +85,7 @@ export async function runPostgresRestoreTest({
 
     const verifiedAt = now();
     const update = await pool.query(
-      "UPDATE backup_runs SET restore_verified_at=$1 WHERE local_path=$2 AND state='ok'",
+      "UPDATE backup_runs SET restore_verified_at=$1,document_restore_verified_at=$1 WHERE local_path=$2 AND state='ok'",
       [verifiedAt, selectedPath]
     );
     if (update.rowCount !== 1) throw new Error("restore_test_audit_update_failed");
@@ -91,6 +94,9 @@ export async function runPostgresRestoreTest({
       backupPath: selectedPath,
       restoredTableCount: REQUIRED_TABLES.length,
       counts,
+      documentArchiveVerified: documentVerification.verified,
+      documentCount: documentVerification.documentCount,
+      documentBytes: documentVerification.documentBytes,
       restoreVerifiedAt: verifiedAt,
       temporaryDatabaseDropped: true
     };
