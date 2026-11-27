@@ -1,6 +1,7 @@
 import worker from "./worker.js";
 import { GOVRADAR_SINGLE_CRON, govradarScheduledTask } from "./worker.js";
 import { createPostgresD1Database, createPostgresPoolFromEnv } from "./postgres-d1.mjs";
+import { pathToFileURL } from "node:url";
 
 const TICK_MS = 15_000;
 const STALE_RUN_MS = 30 * 60_000;
@@ -89,7 +90,7 @@ export function createScheduler({ db, workerImpl = worker, env, now = Date.now, 
   return {
     async start() {
       await recoverInterruptedRuns(db, now());
-      await tick();
+      await tick().catch(error => logger.error?.(JSON.stringify({ event: "scheduler_initial_tick_error", errorCode: safeErrorCode(error) })));
       timer = setInterval(() => {
         tick().catch(error => logger.error?.(JSON.stringify({
           event: "scheduler_tick_error",
@@ -138,7 +139,7 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
     console.error(JSON.stringify({ event: "scheduler_start_failed", error: String(error?.message || error) }));
     process.exitCode = 1;
