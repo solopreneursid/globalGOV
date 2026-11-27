@@ -48,3 +48,6 @@ node d1-export-backup.mjs verify /independent-private/globalgov-2026-11-27.enc
 ```
 
 Keep the secret separately from ciphertext, keep two independent encrypted copies, and record aggregate verification evidence only. This procedure does not overwrite live D1 or provision any storage. Actual owner-controlled D1 export and independent restore remain required. A local integrity test is not a live-cloud restore certification. Category age ranges are explicitly reviewed and never stacked by inference; the matching code and applicant facts must be confirmed. No real category data is stored or published.
+
+### Owner-side signing
+The `review-sign.mjs` helper validates and signs a manually prepared byte-exact review payload using an existing owner-controlled Ed25519 private key. It requires `GLOBALGOV_REVIEW_APPROVED=YES`, private input and output permissions, and the explicit SDSC source scope. It writes only the signed configuration for separate founder-approved enrollment. It does not enroll the public key, turn on the source or assert legal/statutory approval. An empty or synthetic test bundle is never a production approval. Never share the private signing key with ChatGPT, GitHub or Cloudflare.
