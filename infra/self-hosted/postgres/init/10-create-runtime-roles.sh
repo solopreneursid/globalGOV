@@ -9,8 +9,6 @@ set -eu
 : "${BACKUP_DB_PASSWORD:?BACKUP_DB_PASSWORD must be set}"
 : "${RESTORE_TEST_DB_USER:?RESTORE_TEST_DB_USER must be set}"
 : "${RESTORE_TEST_DB_PASSWORD:?RESTORE_TEST_DB_PASSWORD must be set}"
-: "${RESTORE_TEST_DB_USER:?RESTORE_TEST_DB_USER must be set}"
-: "${RESTORE_TEST_DB_PASSWORD:?RESTORE_TEST_DB_PASSWORD must be set}"
 
 psql --no-psqlrc --set=ON_ERROR_STOP=1 \
   --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
@@ -30,7 +28,6 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db_name" TO :"app_user", :"backup_user";
 GRANT USAGE ON SCHEMA public TO :"app_user", :"backup_user";
 GRANT pg_read_all_data TO :"backup_user";
-GRANT CONNECT ON DATABASE postgres TO :"restore_user";
 GRANT CONNECT ON DATABASE postgres TO :"restore_user";
 
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
