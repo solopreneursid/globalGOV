@@ -69,6 +69,24 @@ export function mergeSourcePolicySources(...registries) {
   return [...sources.values()];
 }
 
+export function mergeSourcePolicySources(directorySources, adapterSources = []) {
+  if (!Array.isArray(directorySources) || !Array.isArray(adapterSources)) {
+    throw new Error("source_policy_merge_inputs_invalid");
+  }
+  const merged = new Map();
+  for (const source of [...directorySources, ...adapterSources]) {
+    if (!source || typeof source.id !== "string" || !source.id.trim()) {
+      throw new Error("source_policy_source_id_invalid");
+    }
+    const url = source.url || source.api;
+    if (typeof url !== "string" || !url) throw new Error("source_policy_source_url_invalid");
+    const normalized = { ...source, url };
+    const previous = merged.get(source.id);
+    merged.set(source.id, previous ? { ...previous, ...normalized } : normalized);
+  }
+  return [...merged.values()];
+}
+
 export async function seedSourcePolicyRegistry(pool, sources, now = Date.now()) {
   if (!pool || typeof pool.query !== "function" || !Array.isArray(sources) || !Number.isSafeInteger(now)) {
     throw new Error("source_policy_seed_inputs_invalid");
