@@ -139,11 +139,32 @@ export default {
     if (path === "/api/jurisdictions") return JSONResponse(filterSources(SOURCES,url.searchParams),200,"public, max-age=600");
     if (path === "/api/source-status") return getPortalStatus(env?.DB, SOURCES);
     if (path === "/api/source-connectors") {
-      const sources = buildSourceConnectorInventory(SOURCES);
+      const inventory = buildSourceConnectorInventory(SOURCES);
+      let policyRows = [];
+      try {
+        const result = await env.DB.prepare(
+          "SELECT source_id,automated_access_status,reuse_status,reviewed_at,expires_at FROM source_policy_reviews"
+        ).all();
+        policyRows = result.results || [];
+      } catch {
+        // Cloudflare staging predates the self-hosted policy table; static first-party policy remains fail-closed.
+      }
+      const byId = new Map(policyRows.map(row => [row.source_id, row]));
+      const sources = inventory.map(source => {
+        const policy = byId.get(source.id);
+        return {
+          ...source,
+          automationStatus: policy?.automated_access_status || source.automationStatus,
+          reuseStatus: policy?.reuse_status || source.reuseStatus,
+          policyReviewed: Boolean(policy?.reviewed_at),
+          policyExpiresAt: policy?.expires_at || null
+        };
+      });
       return JSONResponse({ generatedAt: new Date().toISOString(), total: sources.length,
         automatedConnectors: sources.filter(x => x.automatedCollectionEnabled).length,
         directoryOnly: sources.filter(x => x.connector === "directory_only").length,
-        sources, notice: "A directory entry is not permission to automate collection or republish content. Connector status reflects the current first-party policy configuration." }, 200, "no-store");
+        policyReviewed: sources.filter(x => x.policyReviewed).length,
+        sources, notice: "A directory entry is not permission to automate collection or republish content. Automated collection requires a current reviewed policy and robots approval." }, 200, "no-store");
     }
     if (path === "/api/reviewed-recruitment") return JSONResponse(await readReviewedCatalog(),200,"no-store");
     if(path==="/api/usajobs/history")return handleUsajobsHistory(request,{fetcher:env?.USAJOBS_FETCH||fetch});
