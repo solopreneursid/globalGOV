@@ -10,8 +10,17 @@ async function readPrivate(path,max){
  const s=await lstat(path);if(!s.isFile()||s.isSymbolicLink()||(s.mode&0o077)!==0||s.size>max)throw Error('private_input_required');
  return readFile(path);
 }
+// Reject unknown fields before placing a payload in a public source tree.
+function publicShape(doc){
+ const only=(object,keys)=>object&&typeof object==='object'&&!Array.isArray(object)&&Object.keys(object).every(x=>keys.includes(x));
+ const base=['id','sourceId','advertisement','evidence'];
+ const evidence=['url','sha256','page','line','publishedAt','observedAt'];
+ if(!only(doc,['schemaVersion','scope','publicLaunchAuthorized','reviewedAt','expiresAt','posts','events'])||!Array.isArray(doc.posts)||!Array.isArray(doc.events))throw Error('non_public_payload_shape');
+ if(!doc.posts.every(x=>only(x,[...base,'postCode','title','vacancies','opensAt','closesAt','qualification','age','fee','salary'])&&only(x.evidence,evidence))||!doc.events.every(x=>only(x,[...base,'type'])&&only(x.evidence,evidence)))throw Error('non_public_payload_shape');
+}
 export async function signReviewedPayload({payload,keyId,privateKey,sources,now=Date.now()}){
  if(typeof payload!=='string'||Buffer.byteLength(payload)>MAX||typeof keyId!=='string'||! /^[A-Za-z0-9_-]{1,80}$/.test(keyId)||!Array.isArray(sources)||sources.length!==1||sources[0]!=='india-sdsc-shar')throw Error('invalid_signing_scope');
+ publicShape(JSON.parse(payload));
  const k=privateKey?.type==='private'?privateKey:createPrivateKey(privateKey);
  if(k.asymmetricKeyType!=='ed25519')throw Error('ed25519_required');
  const pub=createPublicKey(k).export({format:'jwk'}).x;

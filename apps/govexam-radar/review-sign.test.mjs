@@ -11,4 +11,5 @@ test('explicit local signing interoperates with the staging verifier without enr
  assert.equal((await readReviewedCatalog()).state,'not_enrolled');assert.equal(result.configuration.keys.test.length,43);
  await assert.rejects(signReviewedPayload({...input,payload:JSON.stringify({...doc,publicLaunchAuthorized:true})}),/failed_validation/);
  await assert.rejects(signReviewedPayload({...input,sources:['unknown']}),/invalid_signing_scope/);
+ await assert.rejects(signReviewedPayload({...input,payload:JSON.stringify({...doc,privateApplicantName:'synthetic only'})}),/non_public_payload_shape/);
 });

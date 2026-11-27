@@ -3,7 +3,7 @@
 import {createCipheriv,createDecipheriv,randomBytes,createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {execFileSync} from 'node:child_process';
-import {mkdtemp,readFile,writeFile,lstat,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,lstat,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -37,7 +37,7 @@ export async function verifySqlExport(sql){
   // SQLite CLI safe mode disables shell commands, extension loading, ATTACH,
   // and filesystem access via SQL. Run on an unprivileged dedicated host.
   // Do not include SQL or stderr in error messages.
-  try{execFileSync('sqlite3',['-safe','-batch','-bail',path],{input:sql,timeout:30000,maxBuffer:1024*1024,stdio:['pipe','pipe','pipe']});}
+  try{execFileSync('sqlite3',['-safe','-batch','-bail','-init','/dev/null',path],{input:sql,timeout:30000,maxBuffer:1024*1024,stdio:['pipe','pipe','pipe'],env:{PATH:process.env.PATH||'/usr/bin:/bin',HOME:dir,LANG:'C'},cwd:dir});}
   catch{throw Error('isolated_sql_import_failed');}
   const db=new DatabaseSync(path,{readOnly:true});
   try{

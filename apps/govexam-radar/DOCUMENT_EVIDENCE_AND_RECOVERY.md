@@ -51,3 +51,5 @@ Keep the secret separately from ciphertext, keep two independent encrypted copie
 
 ### Owner-side signing
 The `review-sign.mjs` helper validates and signs a manually prepared byte-exact review payload using an existing owner-controlled Ed25519 private key. It requires `GLOBALGOV_REVIEW_APPROVED=YES`, private input and output permissions, and the explicit SDSC source scope. It writes only the signed configuration for separate founder-approved enrollment. It does not enroll the public key, turn on the source or assert legal/statutory approval. An empty or synthetic test bundle is never a production approval. Never share the private signing key with ChatGPT, GitHub or Cloudflare.
+
+The signing CLI rejects unknown root, post, event and evidence keys to prevent incidental applicant or reviewer metadata entering a source-controlled payload. Review free-text fields for personal information as well. The SQLite subprocess receives a restricted environment and does not inherit backup or cloud credentials.
