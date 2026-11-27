@@ -10,7 +10,7 @@ export const USAJOBS_HISTORY_HTML=`<!doctype html>
 export const USAJOBS_HISTORY_CSS=`*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:#17263b;font:16px/1.55 system-ui,-apple-system,sans-serif}header,main,footer{max-width:1120px;margin:auto;padding:18px}header{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid #dce4ed;background:#fff;max-width:none;padding-left:max(18px,calc((100% - 1084px)/2));padding-right:max(18px,calc((100% - 1084px)/2))}header nav{display:flex;gap:16px;flex-wrap:wrap}a{color:#174a9a}.brand{font-weight:850;font-size:21px;text-decoration:none;color:#17263b}.eyebrow{font-size:11px;font-weight:800;letter-spacing:1.3px;color:#12665f;margin-top:26px}h1{font-size:clamp(30px,5vw,46px);line-height:1.1;letter-spacing:-1.3px;margin:8px 0}.intro{max-width:760px;color:#4b5e73}.notice{border:1px solid #f1d49a;background:#fff9e9;border-radius:12px;padding:13px 16px;margin:18px 0 22px;font-size:14px}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:13px;background:#fff;border:1px solid #dce4ed;border-radius:16px;padding:18px;box-shadow:0 5px 18px #1d35520b}.field{display:grid;gap:5px;min-width:0}.field label{font-size:13px;font-weight:750;color:#3a5068}.field input{min-width:0;width:100%;min-height:44px;border:1px solid #b8c7d7;border-radius:8px;padding:9px;font:inherit;color:#17263b;background:#fff}.advanced{grid-column:1/-1;border-top:1px solid #e5ebf1;padding-top:10px}.advanced summary{font-weight:700;font-size:13px;cursor:pointer}.dates{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:13px;padding-top:12px}.actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.actions button,.pager button{min-height:44px;border:0;border-radius:9px;background:#145e58;color:#fff;padding:10px 16px;font:700 14px system-ui;cursor:pointer}.actions .secondary,.pager .secondary{background:#fff;border:1px solid #b8c7d7;color:#1b4058}.results{margin:28px 0}.result-head{display:flex;justify-content:space-between;gap:16px;align-items:baseline;flex-wrap:wrap}.result-head h2,.credit h2{font-size:21px;margin:0}.result-head p{font-size:13px;color:#516579}.records{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px}.record{background:#fff;border:1px solid #dce4ed;border-radius:13px;padding:15px;min-width:0;overflow-wrap:anywhere}.record h3{font-size:16px;line-height:1.35;margin:7px 0}.record p{font-size:13px;color:#4e6175;margin:5px 0}.badge{display:inline-block;border-radius:30px;background:#e7f5ef;color:#145c48;padding:3px 8px;font-size:11px;font-weight:800}.record button{min-height:38px;margin-top:10px;border:1px solid #b8c7d7;border-radius:8px;background:#f7fafc;padding:7px 11px;font-weight:700;color:#174a69;cursor:pointer}.detail{border-top:1px solid #e5ebf1;margin-top:12px;padding-top:10px}.detail h4{font-size:13px;margin:12px 0 4px}.detail p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}.pager{display:flex;justify-content:center;align-items:center;gap:16px;margin:18px}.pager button[hidden]{display:none}.credit{border-top:1px solid #dce4ed;padding-top:18px;margin:34px 0;color:#526579;font-size:13px}.credit p{max-width:900px}footer{border-top:1px solid #dce4ed;color:#627386;font-size:13px;margin-top:28px}@media(max-width:520px){header{align-items:flex-start;flex-direction:column}header nav{gap:12px;font-size:13px}.result-head{display:block}.result-head p{line-height:1.5}}`;
 export const USAJOBS_HISTORY_JS=`(()=>{'use strict';
 const $=id=>document.getElementById(id);
-const state={records:[],page:0,nextCursor:null,filters:null,totalCount:0,retrievedAt:null,loading:false};
+const state={records:[],page:0,pageStarts:[0],nextCursor:null,filters:null,totalCount:0,retrievedAt:null,loading:false};
 const pageSize=20;
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;}
 function date(v){if(!v)return 'Not provided';const d=new Date(v+'T00:00:00Z');return Number.isNaN(d.getTime())?'Not provided':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'});}
@@ -18,7 +18,7 @@ function money(v){return Number.isFinite(v)&&v>0?'$'+Math.round(v).toLocaleStrin
 function addText(parent,label,value){if(!value)return;const p=node('p','',label+': '+value);parent.append(p);}
 function render(){
  const root=$('records');root.replaceChildren();
- const start=state.page*pageSize,rows=state.records.slice(start,start+pageSize);
+ const start=state.pageStarts[state.page]??0,rows=state.records.slice(start,start+pageSize);
  for(const row of rows){
   const card=node('article','record'),badge=node('span','badge','Closed · historical record');
   card.append(badge,node('h3','',row.title));
@@ -42,8 +42,9 @@ function render(){
  }
  $('page-label').textContent=rows.length?'Page '+(state.page+1)+' · '+state.records.length+' loaded of '+state.totalCount+' reported':'';
  $('previous').hidden=state.page===0;
- $('next').hidden=state.page+1<Math.ceil(state.records.length/pageSize)?false:!state.nextCursor;
- $('next').textContent=state.page+1<Math.ceil(state.records.length/pageSize)?'Next':'Load next data page';
+ const hasLoadedNext=start+pageSize<state.records.length;
+ $('next').hidden=!hasLoadedNext&&!state.nextCursor;
+ $('next').textContent=hasLoadedNext?'Next':'Load next data page';
 }
 async function loadDetail(row,card,button){
  const existing=card.querySelector('.detail');if(existing){existing.remove();button.textContent='View archived announcement text';return;}
@@ -74,7 +75,7 @@ async function search(cursor,append){
  try{
   const params=formParams(cursor),r=await fetch('/api/usajobs/history?'+params.toString(),{cache:'no-store'}),data=await r.json();
   if(!r.ok)throw Error(data.error||'archive_unavailable');
-  if(!append){state.records=[];state.page=0;state.filters=formParams(null);}
+  if(!append){state.records=[];state.page=0;state.pageStarts=[0];state.filters=formParams(null);}
   state.records=state.records.concat(data.records||[]);state.nextCursor=data.nextCursor;state.totalCount=data.totalCount;state.retrievedAt=data.retrievedAt;
   $('status').textContent=(data.records||[]).length+' closed historical records received from one upstream page. '+Object.values(data.rejected||{}).reduce((a,b)=>a+b,0)+' records were excluded by date or schema checks. Total reported by USAJOBS for this query: '+data.totalCount+'.';
   if(!state.records.length)$('status').textContent='No closed historical records matched these filters. Change the date range or series.';
@@ -86,10 +87,12 @@ async function search(cursor,append){
 $('history-form').addEventListener('submit',e=>{e.preventDefault();state.nextCursor=null;void search(null,false);});
 $('previous').addEventListener('click',()=>{if(state.page>0){state.page--;render();}});
 $('next').addEventListener('click',async()=>{
- if(state.page+1<Math.ceil(state.records.length/pageSize)){state.page++;render();return;}
- if(state.nextCursor){const old=state.records.length;await search(state.nextCursor,true);if(state.records.length>old){state.page++;render();}}
+ if(state.page+1<state.pageStarts.length){state.page++;render();return;}
+ const start=state.pageStarts[state.page]??0;
+ if(start+pageSize<state.records.length){state.pageStarts.push(start+pageSize);state.page++;render();return;}
+ if(state.nextCursor){const old=state.records.length;await search(state.nextCursor,true);if(state.records.length>old){state.pageStarts.push(old);state.page++;render();}}
 });
-$('history-form').addEventListener('reset',()=>{setTimeout(()=>{setDefaults();state.records=[];state.page=0;state.nextCursor=null;render();$('status').textContent='Choose a date range and search.';},0);});
+$('history-form').addEventListener('reset',()=>{setTimeout(()=>{setDefaults();state.records=[];state.page=0;state.pageStarts=[0];state.nextCursor=null;render();$('status').textContent='Choose a date range and search.';},0);});
 function iso(d){return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');}
 function setDefaults(){const now=new Date(),end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())),start=new Date(end);start.setUTCFullYear(start.getUTCFullYear()-1);$('closeFrom').value=iso(start);$('closeTo').value=iso(end);}
 setDefaults();void search(null,false);
