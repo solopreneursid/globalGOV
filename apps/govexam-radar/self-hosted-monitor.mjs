@@ -108,14 +108,19 @@ export async function inspectSelfHostedHealth({
 
   try {
     const result = await pool.query(
-      "SELECT finished_at,state,restore_verified_at,error_code FROM backup_runs WHERE state='ok' ORDER BY finished_at DESC LIMIT 1"
+      "SELECT finished_at,state,archive_verified_at,restore_verified_at,error_code FROM backup_runs WHERE state='ok' ORDER BY finished_at DESC LIMIT 1"
     );
     const latest = result.rows[0];
     if (!latest) {
       checks.push(issue("backup", "critical", "no_successful_backup"));
-    } else if (!latest.restore_verified_at) {
-      checks.push(issue("backup", "critical", "backup_restore_verification_missing", {
+    } else if (!latest.archive_verified_at) {
+      checks.push(issue("backup", "critical", "backup_archive_verification_missing", {
         lastBackupAt: Number(latest.finished_at)
+      }));
+    } else if (!latest.restore_verified_at || timestamp - Number(latest.restore_verified_at) > 30 * 86400000) {
+      checks.push(issue("backup", "warning", "full_restore_test_missing_or_stale", {
+        lastBackupAt: Number(latest.finished_at),
+        lastRestoreTestAt: latest.restore_verified_at ? Number(latest.restore_verified_at) : null
       }));
     } else if (timestamp - Number(latest.finished_at) > STALE_BACKUP_MS) {
       checks.push(issue("backup", "critical", "backup_stale", {
