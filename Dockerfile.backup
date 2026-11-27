@@ -26,6 +26,7 @@ COPY apps/govexam-radar/backup-crypto.mjs ./
 COPY apps/govexam-radar/document-backup.mjs ./
 COPY apps/govexam-radar/postgres-restore-test.mjs ./
 COPY apps/govexam-radar/backup-scheduler.mjs ./
+COPY apps/govexam-radar/restore-scheduler.mjs ./
 
 RUN useradd --uid 1000 --create-home globalgov \
     && mkdir -p /var/lib/globalgov/backups /home/globalgov/.ssh \
