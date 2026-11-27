@@ -1,5 +1,9 @@
 FROM node:26-bookworm-slim
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sqlite3 poppler-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 WORKDIR /app
 
