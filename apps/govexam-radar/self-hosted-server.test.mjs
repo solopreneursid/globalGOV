@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createNodeServer } from "./self-hosted-server.mjs";
+import { createNodeServer, createRuntimeEnvironment } from "./self-hosted-server.mjs";
 
 async function withServer(options, run) {
   const server = createNodeServer(options);
