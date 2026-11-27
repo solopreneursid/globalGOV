@@ -52,7 +52,7 @@ Redis, Kubernetes, a vector database, and a continuously running LLM are deliber
 
 | Concern | Initial choice | Reason |
 |---|---|---|
-| Runtime | Node.js 22 LTS | Existing application is JavaScript ES modules and Fetch API based |
+| Runtime | Node.js 26 LTS | Existing application is JavaScript ES modules and Fetch API based |
 | HTTP | Native Node HTTP server | Avoid an unnecessary web framework and preserve the current request handler |
 | Database | PostgreSQL 17 | Durable transactional source of truth, mature backup/restore and indexing |
 | Search | PostgreSQL full-text search | Avoid a separate search service at initial scale |
