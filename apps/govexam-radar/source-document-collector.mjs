@@ -4,7 +4,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
-import { fetchOfficialDocument, extractPdfText } from "./recruitment-document.mjs";
+import { extractPdfText } from "./recruitment-document.mjs";
+import { fetchOfficialSource } from "./source-connectors.mjs";
+import { getApprovedSourcePolicy } from "./source-policy.mjs";
 import { extractRecruitmentEvidence } from "./recruitment-evidence.mjs";
 import { storePdf, storeManualEvidencePdf } from "./document-store.mjs";
 import { SOURCES } from "./worker.js";
@@ -54,7 +56,15 @@ export async function collectOfficialRecruitmentDocument({
   sourceId, sourceUrl, root = process.env.DOCUMENT_STORE_DIR, fetcher = fetch, pool, now = Date.now()
 } = {}) {
   if (!root) throw new Error("document_store_directory_required");
-  const bytes = await fetchOfficialDocument(sourceId, sourceUrl, fetcher);
+  const source = SOURCES.find(item => item.id === sourceId);
+  if (!source) throw new Error("unknown_registered_source");
+  const policy = await getApprovedSourcePolicy(pool, source, now);
+  if (!policy) throw new Error("source_automation_not_approved_by_reviewed_policy");
+  const fetched = await fetchOfficialSource({
+    source, url: sourceUrl, fetcher, policyOverride: policy,
+    maxBytes: policy.maxBytes, minIntervalMs: policy.minIntervalMs
+  });
+  const bytes = fetched.bytes;
   const stored = await storePdf({ root, bytes });
   const text = extractPdfText(bytes);
   const report = extractRecruitmentEvidence({
