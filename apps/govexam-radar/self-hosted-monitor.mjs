@@ -159,6 +159,18 @@ export async function inspectSelfHostedHealth({
 
 export async function persistHealthChecks(pool, report) {
   const results = [];
+  const active = new Set(report.checks.map(check => check.component + ":" + check.eventCode));
+  const open = await pool.query(
+    "SELECT id,component,event_code FROM system_health_events WHERE resolved_at IS NULL"
+  );
+  for (const row of open.rows) {
+    if (active.has(row.component + ":" + row.event_code)) continue;
+    const resolved = await pool.query(
+      "UPDATE system_health_events SET resolved_at=$1 WHERE id=$2 AND resolved_at IS NULL",
+      [report.checkedAt, row.id]
+    );
+    results.push({ eventCode: row.event_code, state: "resolved", changed: resolved.rowCount });
+  }
   for (const check of report.checks) {
     const details = JSON.stringify(check.details || {});
     if (check.severity === "info") {
