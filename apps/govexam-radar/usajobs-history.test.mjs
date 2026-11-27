@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseUsajobsHistoricPage,parseUsajobsAnnouncementText,handleUsajobsHistory,handleUsajobsAnnouncementText,normalizeHistoryFilters} from './usajobs-history.mjs';
 const now=Date.parse('2026-11-27T00:00:00Z');
-const record=(id=12345678,extra={})=>({usajobsControlNumber:id,announcementNumber:'TEST-2026-01',positionTitle:'IT Specialist',hiringAgencyName:'Synthetic agency',hiringAgencyCode:'VA',hiringDepartmentName:'Department of Veterans Affairs',hiringDepartmentCode:'VA',positionOpenDate:'2026-01-01',positionCloseDate:'2026-02-01',positionExpireDate:'1900-01-01',positionOpeningStatus:'Applications under review',minimumSalary:100000,maximumSalary:120000,minimumGrade:'12',maximumGrade:'13',hiringpaths:[{hiringPath:'The public'}],jobcategories:[{series:'2210'}],positionlocations:[{positionLocationCity:'Washington',positionLocationState:'DC',positionLocationCountry:'United States'}],...extra});
+const record=(id=12345678,extra={})=>({usajobsControlNumber:id,announcementNumber:'TEST-2026-01',positionTitle:'IT Specialist',hiringAgencyName:'Synthetic agency',hiringAgencyCode:'VA',hiringDepartmentName:'Department of Veterans Affairs',hiringDepartmentCode:'VA',positionOpenDate:'2026-01-01',positionCloseDate:'2026-02-01',positionExpireDate:'1900-01-01',positionOpeningStatus:'Applications under review',minimumSalary:100000,maximumSalary:120000,minimumGrade:'12',maximumGrade:'13',hiringPaths:[{hiringPath:'The public'}],jobCategories:[{series:'2210'}],positionLocations:[{positionLocationCity:'Washington',positionLocationState:'DC',positionLocationCountry:'United States'}],...extra});
 const page=(rows,token='next%3D%3D')=>({paging:{metadata:{totalCount:100,pageSize:500,continuationToken:token}},data:rows});
 test('normalizes actual lower-camel Historic JOA payload and excludes open records',()=>{
  const r=parseUsajobsHistoricPage(page([record(),record(2,{positionExpireDate:'2026-01-15'}),record(3,{positionCloseDate:'2026-12-31'}),record(4,{positionCloseDate:null}),record(5,{positionOpeningStatus:'Accepting applications'})]),now);
@@ -29,7 +29,7 @@ test('announcement text maps only documented public fields and enforces exact co
 });
 test('historic endpoint uses no credentials and makes one bounded request',async()=>{
  let called=0;const response=page([record()],null);
- const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async(url,init)=>{called++;const u=new URL(url);assert.equal(u.origin,'https://data.usajobs.gov');assert.equal(u.pathname,'/api/historicjoa');assert.equal(u.searchParams.get('PositionSeries'),'2210');assert.equal(u.searchParams.get('StartPositionCloseDate'),'11-27-2025');assert.equal(u.searchParams.get('EndPositionCloseDate'),'11-27-2026');assert.equal(init.redirect,'error');assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers['Authorization-Key'],undefined);return Response.json(response);}});
+ const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async(url,init)=>{called++;const u=new URL(url);assert.equal(u.origin,'https://data.usajobs.gov');assert.equal(u.pathname,'/api/historicjoa');assert.equal(u.searchParams.get('PositionSeries'),'2210');assert.equal(u.searchParams.get('StartPositionCloseDate'),'11-27-2025');assert.equal(u.searchParams.get('EndPositionCloseDate'),'11-27-2026');assert.equal(init.redirect,'error');assert.equal(init.headers.Authorization,undefined);assert.equal(init.headers['Authorization-Key'],undefined);assert.match(init.headers['User-Agent'],/^globalGOV\//);return Response.json(response);}});
  assert.equal(r.status,200);assert.equal((await r.json()).records.length,1);assert.equal(called,1);
 });
 test('history endpoint rejects unbounded queries without touching upstream',async()=>{
@@ -50,4 +50,9 @@ test('rejects unsafe cursors and invalid exact identifiers',async()=>{
 test('continuation token is decoded once and forwarded under documented lowercase query key',async()=>{
  const r=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27&cursor=next%253D%253D'),{now,fetcher:async(url)=>{const u=new URL(url);assert.equal(u.searchParams.get('continuationtoken'),'next==');assert.equal(u.searchParams.has('continuationToken'),false);return Response.json(page([],null));}});
  assert.equal(r.status,200);
+});
+
+test('upstream schema errors are exposed as bounded stable codes, not swallowed as network failures',async()=>{
+ const response=await handleUsajobsHistory(new Request('https://app.test/api/usajobs/history?series=2210&closeFrom=2025-11-27&closeTo=2026-11-27'),{now,fetcher:async()=>Response.json({paging:{metadata:{totalCount:1,pageSize:500}},data:{unexpected:true}})});
+ assert.equal(response.status,502);assert.equal((await response.json()).error,'historic_schema_changed');
 });
