@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS backup_runs (
   byte_length BIGINT,
   archive_verified_at BIGINT,
   restore_verified_at BIGINT,
+  document_archive_path TEXT,
+  document_archive_sha256 CHAR(64),
+  remote_document_sha256 CHAR(64),
+  document_archive_bytes BIGINT,
+  document_count INTEGER,
+  document_archive_verified_at BIGINT,
+  document_restore_verified_at BIGINT,
   error_code TEXT,
   details JSONB NOT NULL DEFAULT '{}'::jsonb
 );
