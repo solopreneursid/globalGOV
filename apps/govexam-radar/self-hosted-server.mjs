@@ -59,6 +59,7 @@ export function createRuntimeEnvironment({ db, env = process.env } = {}) {
   };
   if (env.INGEST_HMAC_KEY) runtime.INGEST_HMAC_KEY = env.INGEST_HMAC_KEY;
   if (env.MODERATOR_TOKEN) runtime.MODERATOR_TOKEN = env.MODERATOR_TOKEN;
+  if (env.SSB_AUTOMATED_ACCESS_APPROVED) runtime.SSB_AUTOMATED_ACCESS_APPROVED = env.SSB_AUTOMATED_ACCESS_APPROVED;
   return runtime;
 }
 
