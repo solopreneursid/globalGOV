@@ -71,11 +71,18 @@ export class MemoryCache {
 }
 
 export function installDefaultCache(options) {
-  if (!globalThis.caches?.default) {
-    const cache = new MemoryCache(options);
+  if (!globalThis.caches) {
     Object.defineProperty(globalThis, "caches", {
       configurable: true,
-      value: { default: cache }
+      writable: true,
+      value: {}
+    });
+  }
+  if (!globalThis.caches.default) {
+    Object.defineProperty(globalThis.caches, "default", {
+      configurable: true,
+      writable: true,
+      value: new MemoryCache(options)
     });
   }
   return globalThis.caches.default;
