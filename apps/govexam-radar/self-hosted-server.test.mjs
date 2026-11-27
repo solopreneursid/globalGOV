@@ -67,5 +67,5 @@ test("runtime environment passes the PostgreSQL source-policy registry fail-clos
  assert.equal(runtime.SOURCE_POLICY_POOL,pool);
  assert.equal(runtime.REQUIRE_SOURCE_POLICY_REGISTRY,"true");
  const disabled=createRuntimeEnvironment({db,pool,env:{}});
- assert.equal(disabled.REQUIRE_SOURCE_POLICY_REGISTRY,"false");
+ assert.equal(disabled.REQUIRE_SOURCE_POLICY_REGISTRY,"true");
 });
