@@ -72,18 +72,18 @@ const DEFAULT_POLICY = Object.freeze({
 const hostQueues = new Map();
 const lastRequestAt = new Map();
 
-function normalizedHost(source) {
+function normalizedSourceUrl(source) {
   if (!source || typeof source.url !== "string") throw new Error("source_url_required");
   const url = new URL(source.url);
-  if (url.protocol !== "https:" || url.username || url.password || url.port) {
-    throw new Error("source_url_not_public_https");
-  }
-  return url.hostname.toLowerCase();
+  if (url.username || url.password || url.port) throw new Error("source_url_not_public");
+  return { host: url.hostname.toLowerCase(), secure: url.protocol === "https:" };
 }
 
 export function sourceAutomationPolicy(source) {
-  const host = normalizedHost(source);
-  const configured = HOST_POLICIES[host] || DEFAULT_POLICY;
+  const { host, secure } = normalizedSourceUrl(source);
+  const configured = secure ? (HOST_POLICIES[host] || DEFAULT_POLICY) : {
+    ...DEFAULT_POLICY, automationStatus: "https_required"
+  };
   const rights = sourceRights(source.id) || sourceRights(RIGHTS_ALIASES[host]);
   return Object.freeze({
     sourceId: source.id,
