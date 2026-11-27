@@ -260,7 +260,7 @@ export async function createPostgresBackup({
     "INSERT INTO backup_runs(id,started_at,state,local_path,remote_target) VALUES($1,$2,'running',$3,$4) " +
     "ON CONFLICT(id) DO UPDATE SET started_at=EXCLUDED.started_at,state='running',finished_at=NULL," +
     "local_path=EXCLUDED.local_path,remote_target=EXCLUDED.remote_target,local_sha256=NULL,remote_sha256=NULL," +
-    "byte_length=NULL,restore_verified_at=NULL,error_code=NULL,details='{}'::jsonb " +
+    "byte_length=NULL,archive_verified_at=NULL,restore_verified_at=NULL,error_code=NULL,details='{}'::jsonb " +
     "WHERE (backup_runs.state='error' AND backup_runs.started_at < EXCLUDED.started_at - 900000) " +
     "OR (backup_runs.state='running' AND backup_runs.started_at < EXCLUDED.started_at - 1800000) RETURNING id",
     [runId, startedAt, finalPath, remoteTarget || null]
@@ -280,11 +280,12 @@ export async function createPostgresBackup({
     archiveVerified = true;
     let remoteCopy = null;
     if (remoteTarget) remoteCopy = await copyOffHost(finalPath, remoteTarget, env);
+    if (remoteCopy && remoteCopy.sha256 !== archive.sha256) throw new Error('remote_backup_checksum_mismatch');
     const pruned = await pruneLocalBackups(resolve(backupDir), retentionDays, finalPath);
     const finishedAt = now();
     await pool.query(
       `UPDATE backup_runs SET finished_at=$1,state='ok',local_sha256=$2,remote_target=$3,remote_sha256=$4,
-       byte_length=$5,restore_verified_at=$6,error_code=NULL,details=$7::jsonb WHERE id=$8`,
+       byte_length=$5,archive_verified_at=$6,restore_verified_at=NULL,error_code=NULL,details=$7::jsonb WHERE id=$8`,
       [finishedAt, archive.sha256, remoteCopy?.target || null, remoteCopy?.sha256 || null, archive.bytes, finishedAt,
         JSON.stringify({ pgDumpVersion: archive.pgDumpVersion, archiveVerified: verification.verified,
           remoteCopyCompleted: Boolean(remoteCopy), remoteHashVerified: Boolean(remoteCopy), localBackupsPruned: pruned }), runId]
