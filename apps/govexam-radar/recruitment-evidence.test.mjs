@@ -26,7 +26,7 @@ test('direct PDF fetch requires reviewed policy before any network request',asyn
   allowedPaths:['/sdscshar/advt_03_2026/Test.pdf'],allowedContentTypes:['application/pdf'],
   maxBytes:10*1024*1024,minIntervalMs:5000};
  await assert.rejects(fetchOfficialDocument(sourceId,sourceUrl,async()=>{
-  calls++;return new Response('User-agent: *\\nDisallow: /',{headers:{'content-type':'text/plain'}});
+  calls++;return new Response('User-agent: *\nDisallow: /',{headers:{'content-type':'text/plain'}});
  },policy),/robots_disallow/);
  assert.equal(calls,1);
  assert.throws(()=>extractPdfText(Buffer.from('not pdf')),/invalid_pdf/);
