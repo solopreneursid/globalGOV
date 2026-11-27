@@ -1,16 +1,10 @@
 // Run on a controlled local host or CI, never on the public Worker.
 // pdftotext must be installed; no OCR, embedded scripts, or PDF link execution.
 import {execFileSync} from 'node:child_process';
-import {readFile,stat,writeFile} from 'node:fs/promises';
+import {readFile,lstat,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
-import {DOCUMENT_SOURCES,officialDocumentUrl,extractRecruitmentEvidence} from './recruitment-evidence.mjs';
+import {officialDocumentUrl,extractRecruitmentEvidence} from './recruitment-evidence.mjs';
 const MAX=10*1024*1024;
-export async function bounded(response,max){
- if(Number(response.headers.get('content-length')||0)>max)throw Error('response_too_large');
- const reader=response.body?.getReader();if(!reader)throw Error('empty_response');
- const parts=[];let size=0;
- try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>max){await reader.cancel();throw Error('response_too_large');}parts.push(Buffer.from(value));}return Buffer.concat(parts);}finally{reader.releaseLock();}
-}
 export async function fetchOfficialDocument(sourceId,raw,fetcher=fetch,policy=null){
  if(!policy||policy.sourceId!==sourceId||policy.automatedCollectionEnabled!==true||
     policy.automationStatus!=="approved"||!Array.isArray(policy.allowedContentTypes)||
@@ -33,7 +27,7 @@ async function main(){
  if(extra.length||!output||mode!=='--local'||!file)throw Error('usage: node recruitment-document.mjs SOURCE_ID OFFICIAL_PDF_URL --local PRIVATE_LOCAL_PDF OUTPUT.json; network collection must use the reviewed source-document-collector workflow');
  officialDocumentUrl(sourceId,sourceUrl);
  let bytes;
- if(mode==='--local'){const s=await stat(file);if(!s.isFile()||s.size>MAX)throw Error('invalid_local_file');bytes=await readFile(file);}
+ if(mode==='--local'){const s=await lstat(file);if(!s.isFile()||s.isSymbolicLink()||(s.mode&0o077)!==0||s.size<8||s.size>MAX)throw Error('invalid_private_local_file');bytes=await readFile(file);}
  const report=extractRecruitmentEvidence({sourceId,sourceUrl,documentBytes:bytes,text:extractPdfText(bytes),provenance:'local_unverified'});
  await writeFile(output,JSON.stringify(report,null,2)+'\n',{mode:0o600,flag:'wx'});
  console.log(JSON.stringify({reviewState:report.reviewState,sourceId,documentSha256:report.documentSha256,fields:Object.keys(report.fields),conflicts:report.conflicts,events:report.events.length,publicLaunchAuthorized:false}));
