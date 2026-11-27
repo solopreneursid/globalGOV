@@ -43,6 +43,7 @@ export function createBackupScheduler({
       lastAttemptedSlot = runId;
       try {
         const result = await backupFn({ runId });
+        if (result?.state === "already_claimed") lastAttemptedSlot = null;
         logger.info?.(JSON.stringify({ event: "daily_backup_complete", runId, state: result?.state || "unknown" }));
         return result;
       } catch (error) {
