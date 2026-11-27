@@ -138,6 +138,9 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
     const key = line.slice(0, separator).trim().toLowerCase();
     const value = line.slice(separator + 1).trim();
     if (key === "user-agent") {
+      if (!value || !/^(?:\\*|[a-z0-9_-]+)$/i.test(value)) {
+        throw new Error("robots_user_agent_syntax_unconfirmed");
+      }
       if (!group || group.hasRules) {
         group = { agents: [], rules: [], hasRules: false };
         groups.push(group);
@@ -145,7 +148,12 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
       group.agents.push(value.toLowerCase());
     } else if (group && ["allow", "disallow"].includes(key)) {
       group.hasRules = true;
-      if (value) group.rules.push({ allow: key === "allow", path: value });
+      if (value) {
+        if (!value.startsWith("/") || /[*$]/.test(value)) {
+          throw new Error("robots_rule_syntax_unconfirmed");
+        }
+        group.rules.push({ allow: key === "allow", path: value });
+      }
     }
   }
   const agent = userAgent.toLowerCase();
