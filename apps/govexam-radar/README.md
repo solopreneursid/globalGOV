@@ -26,6 +26,9 @@ globalGOV is a transparent, zero-dependency government recruitment **source dire
 - `GET /api/check?id=upsc`: on-demand reachability for a registry entry. Public API rejects arbitrary URLs.
 - `GET /api/source-status`: persisted reachability status, freshness and last check timestamp for the 58 known source URLs.
 - `GET /api/notices`: separate DfE official-feed notice records with server-side pagination, search and inferred job category.
+- `GET /api/usajobs/history`: one bounded, filter-required page of closed USAJOBS Historic JOA records. Uses the public unauthenticated Historic JOAs endpoint and continuation tokens; never crawls the full archive.
+- `GET /api/usajobs/announcement-text?controlNumber=...`: exact-control-number lookup of whitelisted historical announcement text, fetched only on demand from the public unauthenticated Announcement Text endpoint.
+- `/usajobs-history`: separate historical archive UI. Historical records are never inserted into the active vacancy feed; current USAJOBS Search remains a separate credentialed endpoint.
 - `GET /api/ingestion-status`: latest source-ingestion outcomes; a failed import never fabricates vacancy data. Read-only inspection only.
 - Community API: register / posts / post / reply / vote / report / export / delete-post / delete-account. Posts and replies are held in D1; no third-party account provider.
 
@@ -139,3 +142,8 @@ This remains an isolated Cloudflare staging Worker plus a **draft GitHub pull re
 ## Founder-original global product scope
 
 The six-section global app, not the UK-only candidate, is the product blueprint. See [`ORIGINAL_VISION_IMPLEMENTATION.md`](./ORIGINAL_VISION_IMPLEMENTATION.md). No email collection, mail transport or remote alert service is in scope. The UK isolated Worker remains a source/safety release proof. Existing exam sample records are research leads, not verified live announcements.
+
+
+## USAJOBS public archive
+
+USAJOBS documents the Historic JOAs and Announcement Text endpoints as publicly consumable without authentication. The archive page uses bounded closing-date filters and one upstream continuation-token page per request; it does not mirror the multi-million-record corpus. The current Search Jobs endpoint is separate and requires the owner's API key. Public-data reuse follows the current USAJOBS API Terms of Service, with attribution, retrieval dates, third-party restrictions and clear non-affiliation language. Historical text is never presented as current application guidance.
