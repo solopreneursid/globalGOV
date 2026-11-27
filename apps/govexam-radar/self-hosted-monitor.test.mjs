@@ -16,7 +16,7 @@ function healthyPool() {
         return { rows: [{ task: "portals", state: "ok", started_at: 1000, finished_at: 2000 }] };
       }
       if (sql.startsWith("SELECT finished_at")) {
-        return { rows: [{ finished_at: 3000, state: "ok", restore_verified_at: 3000 }] };
+        return { rows: [{ finished_at: 3000, state: "ok", archive_verified_at: 3000, restore_verified_at: 3000 }] };
       }
       if (sql.startsWith("SELECT source_id,state")) {
         return { rows: [
