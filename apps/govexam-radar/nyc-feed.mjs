@@ -23,11 +23,12 @@ function nyStart(day){
  // Conservative visibility boundary: stop showing the listing at the start
  // of its stated closing day in New York. Never claim an exact closing time.
  const utc=Date.parse(day+"T00:00:00Z");
- const noon=new Date(utc+12*3600000);
- const offset=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",timeZoneName:"shortOffset"}).formatToParts(noon).find(p=>p.type==="timeZoneName")?.value;
- const h=/^GMT-(4|5)$/.exec(offset||"");
- if(!h)throw Error("nyc_timezone_unconfirmed");
- return new Date(utc+Number(h[1])*3600000).toISOString();
+ const format=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+ for(const hours of [4,5]){
+  const instant=new Date(utc+hours*3600000),parts=Object.fromEntries(format.formatToParts(instant).map(p=>[p.type,p.value]));
+  if(parts.year+"-"+parts.month+"-"+parts.day===day&&parts.hour==="00"&&parts.minute==="00")return instant.toISOString();
+ }
+ throw Error("nyc_timezone_unconfirmed");
 }
 function evidenceLink(id){
  const url=new URL(NYC_SOURCE.url);url.searchParams.set("job_id",id);url.searchParams.set("posting_type","External");return url.href;
