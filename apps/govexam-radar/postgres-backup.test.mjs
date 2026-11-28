@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPostgresBackup } from "./postgres-backup.mjs";
+import { createPostgresBackup, classifyPgDumpFailure } from "./postgres-backup.mjs";
 import { openBackupBytes, safeRemoteTarget, sealBackupBytes } from "./postgres-backup.mjs";
 
 test("PostgreSQL backup envelope authenticates encrypted payloads", () => {
@@ -59,4 +59,18 @@ test("production backup refuses local-only mode when off-host backup is required
     key.fill(0);
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("dump failure categories do not expose raw connection or data details", () => {
+  for (const [input, expected] of [
+    ["pg_dump: error: permission denied for table private_data", "pg_dump_permission_denied"],
+    ["password authentication failed for user private_user", "pg_dump_authentication_failed"],
+    ["server version mismatch", "pg_dump_version_mismatch"],
+    ["could not connect to server private_host", "pg_dump_connection_failed"],
+    ["canceling statement due to lock timeout", "pg_dump_lock_timeout"],
+    ["unrecognized option --private", "pg_dump_invalid_option"],
+    ["no space left on device", "pg_dump_output_failed"],
+    ["unknown secret diagnostic", "pg_dump_failed"]
+  ]) assert.equal(classifyPgDumpFailure(input), expected);
+  assert.equal(classifyPgDumpFailure("private diagnostics", true), "pg_dump_timeout");
 });
