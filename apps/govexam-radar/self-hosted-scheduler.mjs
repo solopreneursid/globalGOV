@@ -1,4 +1,5 @@
 import worker from "./worker.js";
+import { processDiscoveredPdf } from "./discovered-pdf-scheduler.mjs";
 import { runRecruitmentDiscovery } from "./recruitment-discovery.mjs";
 import { POLICY_SOURCES, GOVRADAR_SINGLE_CRON, govradarScheduledTask } from "./worker.js";
 import { createPostgresD1Database, createPostgresPoolFromEnv } from "./postgres-d1.mjs";
@@ -139,7 +140,11 @@ async function main() {
       ...(process.env.INGEST_HMAC_KEY ? { INGEST_HMAC_KEY: process.env.INGEST_HMAC_KEY } : {}),
       ...(process.env.SSB_AUTOMATED_ACCESS_APPROVED ? { SSB_AUTOMATED_ACCESS_APPROVED: process.env.SSB_AUTOMATED_ACCESS_APPROVED } : {})
     };
-    const scheduler = createScheduler({ db, env, discovery: slot => runRecruitmentDiscovery({pool,sources:POLICY_SOURCES,slot}) });
+    const scheduler = createScheduler({ db, env, discovery: async slot => {
+      const links = await runRecruitmentDiscovery({pool,sources:POLICY_SOURCES,slot});
+      const pdf = await processDiscoveredPdf({pool,sources:POLICY_SOURCES});
+      return {links,pdf};
+    } });
     await scheduler.start();
     console.info(JSON.stringify({ event: "scheduler_started", cron: GOVRADAR_SINGLE_CRON, tickMs: TICK_MS }));
 
