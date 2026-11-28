@@ -2,6 +2,7 @@
 // A government's general open-data policy never overrides a narrower
 // service-specific notice. This is a conservative implementation checklist,
 // not a legal opinion or a substitute for written permission where required.
+export const NYC_SOURCE=Object.freeze({id:"us-nyc-dcas-open-jobs",name:"New York City — DCAS",country:"United States",url:"https://data.cityofnewyork.us/resource/kpav-sd4t.json",portal:"https://cityjobs.nyc.gov/"});
 const RIGHT_ENTRIES=[
  {
   id:"us-nyc-dcas-open-jobs",
