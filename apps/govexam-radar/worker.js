@@ -50,7 +50,8 @@ const BASE_SOURCES = [{"id":"upsc","name":"UPSC Recruitment & Examination Notice
 export const SOURCES = combinedSources(BASE_SOURCES);
 export const POLICY_SOURCES = mergeSourcePolicySources(SOURCES, [
   { id: DFE_SOURCE.id, name: DFE_SOURCE.name, country: DFE_SOURCE.country, url: DFE_SOURCE.api },
-  MANITOBA, ISRO_SOURCE, SSB_SOURCE
+  MANITOBA, ISRO_SOURCE, SSB_SOURCE,
+  {id:"india-sdsc-shar",name:"Satish Dhawan Space Centre SHAR",country:"India",url:"https://apps.shar.gov.in/Recruitment/"}
 ]);
 
 async function resolveScheduledSourcePolicy(env, sourceId, targetUrl) {
