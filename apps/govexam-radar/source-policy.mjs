@@ -231,6 +231,7 @@ export async function recordSourcePolicyReview(pool, {
 // access path and source-specific reuse policy in the repository.
 // A recorded deny, expiry or explicit review always takes precedence.
 const PUBLIC_ADAPTERS = Object.freeze({
+  "us-nyc-dcas-open-jobs": "https://data.cityofnewyork.us/resource/kpav-sd4t.json",
   "uk-dfe-teaching-vacancies": "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json",
   "india-isro-opportunities": "https://www.isro.gov.in/ViewAllOpportunities.html"
 });
