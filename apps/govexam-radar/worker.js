@@ -8,6 +8,7 @@ import { ENHANCE_JS } from "./enhance.mjs";
 import { FULL_CSS } from "./full-css.mjs";
 import { handleCommunity } from "./community-api.mjs";
 import { checkPortalAndStore, getPortalStatus, runScheduledPortalChecks } from "./source-monitor.mjs";
+import { NYC_SOURCE, ingestNyc, nycPublicationGate } from "./nyc-feed.mjs";
 import { DFE_SOURCE, ingestDfE, serveOfficialNotices, servePublicIngestionStatus } from "./official-feed.mjs";
 import { OFFICIAL_UI_JS } from "./official-ui.mjs";
 import {RELEASE_PREVIEW_HTML,RELEASE_PREVIEW_CSS,RELEASE_PREVIEW_JS} from "./release-preview-ui.mjs";
@@ -50,7 +51,7 @@ const BASE_SOURCES = [{"id":"upsc","name":"UPSC Recruitment & Examination Notice
 export const SOURCES = combinedSources(BASE_SOURCES);
 export const POLICY_SOURCES = mergeSourcePolicySources(SOURCES, [
   { id: DFE_SOURCE.id, name: DFE_SOURCE.name, country: DFE_SOURCE.country, url: DFE_SOURCE.api },
-  MANITOBA, ISRO_SOURCE, SSB_SOURCE,
+  MANITOBA, ISRO_SOURCE, SSB_SOURCE, NYC_SOURCE,
   {id:"india-sdsc-shar",name:"Satish Dhawan Space Centre SHAR",country:"India",url:"https://apps.shar.gov.in/Recruitment/"}
 ]);
 
@@ -304,12 +305,17 @@ export default {
             return ingestSsb(env.DB,fetch,Date.now(),{
               automatedAccessApproved:true,sourcePolicy:gate.policy
             });
-          })()
+          })(),
+          ...(policyRequired ? [(async()=>{
+            const gate=await resolveScheduledSourcePolicy(env,NYC_SOURCE.id,NYC_SOURCE.url);
+            return gate.policy ? ingestNyc(env.DB,gate.policy) : recordSourcePolicyBlock(env.DB,NYC_SOURCE.id,NYC_SOURCE.url,gate.errorCode);
+          })()] : [])
         ]);
         result={
           portals:outcomes[0].status,
           isro:policyRequired && outcomes[1].status==="fulfilled" ? {state:outcomes[1].value?.state||"error"} : outcomes[1].status,
-          ssb:policyRequired && outcomes[2].status==="fulfilled" ? {state:outcomes[2].value?.state||"error"} : outcomes[2].status
+          ssb:policyRequired && outcomes[2].status==="fulfilled" ? {state:outcomes[2].value?.state||"error"} : outcomes[2].status,
+          ...(policyRequired ? {nyc:outcomes[3].status==="fulfilled" ? {state:outcomes[3].value?.state||"error"} : outcomes[3].status} : {})
         };
       }
       else {
