@@ -307,8 +307,8 @@ export default {
         ]);
         result={
           portals:outcomes[0].status,
-          isro:outcomes[1].status,
-          ssb:outcomes[2].status
+          isro:policyRequired && outcomes[1].status==="fulfilled" ? {state:outcomes[1].value?.state||"error"} : outcomes[1].status,
+          ssb:policyRequired && outcomes[2].status==="fulfilled" ? {state:outcomes[2].value?.state||"error"} : outcomes[2].status
         };
       }
       else {
