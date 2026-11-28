@@ -1,7 +1,8 @@
 // NYC DCAS public open-data snapshot. No account, token, browser or aggregator.
 // Only bounded factual metadata is retained; source records are linked by job ID.
 import {fetchOfficialSource} from "./source-connectors.mjs";
-export const NYC_SOURCE=Object.freeze({id:"us-nyc-dcas-open-jobs",name:"New York City — DCAS",country:"United States",url:"https://data.cityofnewyork.us/resource/kpav-sd4t.json",portal:"https://cityjobs.nyc.gov/"});
+import {NYC_SOURCE} from "./source-rights.mjs";
+export {NYC_SOURCE};
 const MAX_ROWS=5000,DAY=86400000;
 const MONTHS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 const fields="job_id,agency,business_title,posting_type,post_until,posting_date,process_date";
