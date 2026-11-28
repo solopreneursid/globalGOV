@@ -356,3 +356,26 @@ jobs:
       - name: Verify complete bounded NYC snapshot and current-date normalization (research only)
         continue-on-error: true
         run: node apps/govexam-radar/probe-nyc-open-data.mjs --full
+
+  hosted-baseline:
+    # Read-only evidence about the already deployed preview; NOT proof that
+    # this pull request's code is deployed, and never activates production.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify existing hosted preview health and source scope without mutations
+        run: |
+          node --input-type=module <<'NODE'
+          const origin="https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev";
+          const read=async path=>{const r=await fetch(origin+path,{redirect:"error",signal:AbortSignal.timeout(20000),cache:"no-store"});if(!r.ok)throw Error("hosted_http_"+r.status);return r.json();};
+          const [health,notices,status]=await Promise.all([read("/api/health"),read("/api/notices?source=uk-dfe-teaching-vacancies&limit=1"),read("/api/ingestion-status")]);
+          if(health.status!=="ok"||notices.publicLaunchAuthorized!==false||!Number.isSafeInteger(notices.total)||notices.total<1||notices.notices?.length!==1||notices.notices[0].sourceId!=="uk-dfe-teaching-vacancies")throw Error("hosted_baseline_contract_failed");
+          const uk=status.automation?.sources?.find(x=>x.sourceId==="uk-dfe-teaching-vacancies");
+          if(!uk?.scheduledSuccessObserved||!uk?.twoCycleNativeProof)throw Error("hosted_uk_native_cycles_unconfirmed");
+          console.log(JSON.stringify({existingPreviewOnly:true,version:health.version,ukOpenNotices:notices.total,ukTwoCycleProof:uk.twoCycleNativeProof,candidateCodeDeployed:false}));
+          NODE
