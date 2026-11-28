@@ -88,3 +88,22 @@ Before enabling the backup service:
 6. Verify `backup_runs` shows both local archives, remote hashes, archive verification, and the latest monthly restore timestamps. A successful CI image build does not count as an actual backup or restore test.
 
 Use `docker compose run --rm restore-scheduler postgres-restore-test.mjs` for an owner-triggered restore test against the latest successful backup. It does not modify the source database; it creates and drops a temporary database on the same PostgreSQL server.
+
+
+## Isolated UK archive and remote bootstrap
+
+The separate UK-only D1 export is supported by the `encrypt-uk`, `verify-uk`, `plan-uk`, and `apply-uk` actions. The migration preserves all four UK tables in the private `uk_archive` PostgreSQL schema. The application role cannot access this schema. The backup role can read it; the restoration check reports its table counts separately. This is archival migration, **not a replacement running UK-only mirror service**. Keep the old isolated runtime until its retirement is separately approved.
+
+The remote-only bootstrap script is `infra/self-hosted/bootstrap.sh`. It creates private configuration with random credentials, refuses to overwrite existing configuration, and rehearses both exports in a distinct private Compose project. It does not install Docker, purchase infrastructure, start the scheduler or public ingress, or change DNS. Its rehearsal workspace resides outside Git and the Docker build context. The dedicated remote account must have UID 1000 and access to Docker Compose. Each rehearsal allocates a separate project; stop and remove unused rehearsal resources deliberately after reviewing its recorded project name. Never run the script on a personal computer if remote-only hosting is required.
+
+Run `bash infra/self-hosted/bootstrap.sh` without arguments for supported operations. The recovery key must be kept separately from backup archives. An off-host SSH destination and pinned host key are still required before production backup activation.
+
+## Automated discovery boundaries
+
+Daily discovery uses at most two eligible, least-recently attempted registered seeds and up to 40 candidate links per response. The persistent audit ledger drives retry cooldown (one day after success, two to seven days after consecutive failures). A discovered government-domain URL is a candidate, not proof of publication rights, current vacancy or trusted content. Unknown endpoints are never recursively fetched.
+
+The PDF scheduler may acquire one supported, policy-permitted SDSC document per daily cycle, with a seven-day per-URL cooldown. It keeps the original and extracted evidence private. Optional English OCR is used only for wholly textless PDFs of at most five pages, with strict raster and execution budgets; install OCR support by building with `--build-arg ENABLE_OCR=true` and setting `GLOBALGOV_ENABLE_OCR=true` in the dedicated collector runtime. It never authorizes automatic publication from OCR.
+
+Additional open-data research: NYC DCAS official dataset `kpav-sd4t` exposes internal and external postings. The bounded anonymous compatibility probe is research-only; it reports aggregate schema and deadline coverage, never job contents. Review actual API compatibility, update freshness, direct application references and attribution obligations before enabling a publishing adapter. France's official Choisir le Service Public weekly dataset and Île-de-France daily dataset are additional candidates; do not add the large national download or unverified parser to the scheduler by default.
+
+No public release is authorized by these changes. The actual private snapshot import, off-host recovery, live scheduler cycles, security checks and final routing change require an owner-controlled remote target and independently recorded evidence.
