@@ -75,8 +75,12 @@ function canonical(value) {
 
 function rowDigest(rows, columns) {
   const digest = createHash("sha256");
-  for (const row of rows) {
-    digest.update(JSON.stringify(columns.map(column => canonical(row[column]))));
+  // SQLite and PostgreSQL may order text differently (locale, Unicode, case).
+  // Hash the same canonical row multiset in a database-independent byte order.
+  const encoded = rows.map(row => Buffer.from(JSON.stringify(columns.map(column => canonical(row[column]))), "utf8"));
+  encoded.sort(Buffer.compare);
+  for (const row of encoded) {
+    digest.update(row);
     digest.update("\n");
   }
   return digest.digest("hex");
