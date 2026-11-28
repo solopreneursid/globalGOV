@@ -109,10 +109,10 @@ test("database-reviewed automation overrides still cannot bypass a robots redire
   assert.equal(targetRequested, false);
 });
 
-test("robots parser fails closed on wildcard, end-anchor and malformed rule syntax",()=>{
+test("robots parser fails closed on malformed rule syntax",()=>{
   for(const rules of [
-    "User-agent: *\nDisallow: /private/*",
-    "User-agent: *\nDisallow: /private$",
+    "User-agent: *\nDisallow: /private$bad",
+    "User-agent: *\nDisallow: /bad%ZZ",
     "User-agent: *\nDisallow: private",
     "User-agent: \nDisallow: /"
   ]) assert.throws(()=>parseRobotsRules(rules,"globalGOV"),/robots_(?:rule|user_agent)_syntax_unconfirmed/);
@@ -133,4 +133,18 @@ test("robots disallow rules are decoded as text and prevent target requests",asy
     }
   }),/robots_disallow/);
   assert.equal(targetRequested,false);
+});
+
+test("robots wildcard, anchors, encodings, precedence and crawl delays preserve restrictions",()=>{
+ const rules="User-agent: *\nDisallow: /private/*\nAllow: /private/public$\nDisallow: /job%2Fsecret\nDisallow: /%70rotected\nCrawl-delay: 12";
+ assert.equal(parseRobotsRules(rules,"globalGOV","/private/x").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/private/public").allowed,true);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/private/public?x=1").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/job%2fsecret").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/protected").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/job/secret").allowed,true);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/resource/jobs.json").delayMs,12000);
+ const grouped="User-agent: globalGOV\nDisallow: /secret\nUser-agent: otherxxxx\nUser-agent: *\nDisallow: /";
+ assert.equal(parseRobotsRules(grouped,"globalGOV","/secret").allowed,false);
+ assert.equal(parseRobotsRules(grouped,"globalGOV","/public").allowed,true);
 });
