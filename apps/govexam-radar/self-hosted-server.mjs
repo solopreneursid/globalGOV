@@ -59,6 +59,7 @@ export function createRuntimeEnvironment({ db, pool, env = process.env } = {}) {
     REQUIRE_SOURCE_POLICY_REGISTRY: "true",
     USAJOBS_FETCH: fetch
   };
+  if (env.GLOBALGOV_NYC_PUBLICATION === "true") runtime.GLOBALGOV_NYC_PUBLICATION = "true";
   if (env.INGEST_HMAC_KEY) runtime.INGEST_HMAC_KEY = env.INGEST_HMAC_KEY;
   if (env.MODERATOR_TOKEN) runtime.MODERATOR_TOKEN = env.MODERATOR_TOKEN;
   if (env.SSB_AUTOMATED_ACCESS_APPROVED) runtime.SSB_AUTOMATED_ACCESS_APPROVED = env.SSB_AUTOMATED_ACCESS_APPROVED;
