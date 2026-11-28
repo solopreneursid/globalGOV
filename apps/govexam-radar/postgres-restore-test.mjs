@@ -103,6 +103,14 @@ export async function runPostgresRestoreTest({
       const result = await testPool.query('SELECT COUNT(*)::bigint AS count FROM "' + table + '"');
       counts[table] = Number(result.rows[0].count);
     }
+    const ukArchiveCounts = {};
+    const archiveMarker = await testPool.query("SELECT version FROM schema_migrations WHERE version='003_uk_archive'");
+    if (archiveMarker.rowCount) {
+      for (const table of ["official_job_notices","uk_mirror_runs","uk_mirror_state","uk_withdrawal_checks"]) {
+        const result = await testPool.query('SELECT COUNT(*)::bigint AS count FROM uk_archive."' + table + '"');
+        ukArchiveCounts[table] = Number(result.rows[0].count);
+      }
+    }
     await testPool.end();
     testPool = null;
 
@@ -127,6 +135,7 @@ export async function runPostgresRestoreTest({
       backupPath: selectedPath,
       restoredTableCount: REQUIRED_TABLES.length,
       counts,
+      ukArchiveCounts,
       documentArchiveVerified: documentVerification.verified,
       documentCount: documentVerification.documentCount,
       documentBytes: documentVerification.documentBytes,
