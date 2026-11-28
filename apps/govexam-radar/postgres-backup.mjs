@@ -132,6 +132,19 @@ export function safeRemoteTarget(target) {
   return target;
 }
 
+// Never emit raw pg_dump stderr: it can include database identifiers or data.
+export function classifyPgDumpFailure(stderr, timedOut = false) {
+  if (timedOut) return "pg_dump_timeout";
+  if (/permission denied|must be owner|insufficient privilege/i.test(stderr)) return "pg_dump_permission_denied";
+  if (/password authentication failed|no password supplied|no pg_hba.conf entry/i.test(stderr)) return "pg_dump_authentication_failed";
+  if (/server version mismatch|aborting because of server version/i.test(stderr)) return "pg_dump_version_mismatch";
+  if (/could not connect|connection refused|connection to server|could not translate host name/i.test(stderr)) return "pg_dump_connection_failed";
+  if (/lock timeout|statement timeout/i.test(stderr)) return "pg_dump_lock_timeout";
+  if (/unrecognized option|invalid option|invalid compression/i.test(stderr)) return "pg_dump_invalid_option";
+  if (/no space left|could not write/i.test(stderr)) return "pg_dump_output_failed";
+  return "pg_dump_failed";
+}
+
 async function spawnDump(outputPath, key, env) {
   assertKey(key);
   const connection = pgDumpConfiguration(env);
@@ -158,14 +171,20 @@ async function spawnDump(outputPath, key, env) {
   };
   const child = spawn("pg_dump", [
     "--format=custom", "--no-owner", "--no-privileges", "--compress=0",
+    "--no-password", "--lock-wait-timeout=10000",
     "--host", connection.host, "--port", String(connection.port),
-    "--username", connection.user, "--dbname", connection.database, "--file", "-"
+    "--username", connection.user, "--dbname", connection.database
   ], { env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
   child.stderr.on("data", chunk => {
     if (stderr.length < 4096) stderr += chunk.toString("utf8").slice(0, 4096 - stderr.length);
   });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, 10 * 60 * 1000);
+  timer.unref();
   const exit = once(child, "close");
+  // Observe early spawn errors even when the output pipeline rejects first.
+  exit.catch(() => {});
   const hashing = new Transform({
     transform(chunk, encoding, callback) {
       digest.update(chunk);
@@ -176,7 +195,7 @@ async function spawnDump(outputPath, key, env) {
   try {
     await pipeline(child.stdout, cipher, hashing, output);
     const [code] = await exit;
-    if (code !== 0) throw new Error("pg_dump_failed");
+    if (code !== 0) throw new Error(classifyPgDumpFailure(stderr, timedOut));
     const tag = cipher.getAuthTag();
     await appendFile(outputPath, tag, { mode: 0o600 });
     digest.update(tag);
@@ -189,8 +208,11 @@ async function spawnDump(outputPath, key, env) {
   } catch (error) {
     child.kill("SIGTERM");
     await unlink(outputPath).catch(() => {});
-    if (error?.message === "pg_dump_failed") throw error;
+    if (timedOut) throw new Error("pg_dump_timeout");
+    if (String(error?.message || "").startsWith("pg_dump_")) throw error;
     throw new Error("postgres_backup_stream_failed");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
