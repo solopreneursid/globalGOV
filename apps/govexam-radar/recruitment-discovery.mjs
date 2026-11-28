@@ -4,6 +4,15 @@ import { createHash } from "node:crypto";
 import { getScheduledSourcePolicy, sourcePolicyAllowsUrl } from "./source-policy.mjs";
 import { fetchOfficialSource } from "./source-connectors.mjs";
 const MAX_BYTES=512*1024, MAX_LINKS=40, MAX_SEEDS=2;
+const DAY=86400000;
+export function discoveryDue(history, now){
+ if(!history.length)return true;
+ const latest=Number(history[0].finished_at);
+ if(!Number.isSafeInteger(latest)||latest>now)return false;
+ let failures=0;
+ for(const run of history){if(run.state!=="error")break;failures++;}
+ return now-latest >= DAY*Math.min(7,2**Math.min(failures,3));
+}
 const hash=x=>createHash("sha256").update(x).digest("hex");
 const recruitment=/(?:recruit|career|vacanc|employment|job(?:s|posting)?|advertisement|opportunit|hiring)/i;
 function governmentHost(host){
@@ -52,10 +61,12 @@ export async function runRecruitmentDiscovery({pool,sources,slot,fetcher=fetch,n
   const policy=await getScheduledSourcePolicy(pool,source,now());
   if(!policy||!sourcePolicyAllowsUrl(policy,source.url)||
     !policy.allowedContentTypes.some(t=>["text/html","application/xml","text/xml","application/rss+xml"].includes(t)))continue;
-  seeds.push({source,policy});
+  const history=await pool.query("SELECT state,finished_at FROM source_connector_runs WHERE source_id=$1 AND automation_status='candidate_discovery' ORDER BY finished_at DESC LIMIT 4",[source.id]);
+  if(!discoveryDue(history.rows,now()))continue;
+  seeds.push({source,policy,lastAttempt:Number(history.rows[0]?.finished_at||0)});
  }
  const outcomes=[];
- for(const {source,policy} of seeds.slice(0,MAX_SEEDS)){
+ for(const {source,policy} of seeds.sort((a,b)=>a.lastAttempt-b.lastAttempt||a.source.id.localeCompare(b.source.id)).slice(0,MAX_SEEDS)){
   const id="discovery:"+hash(slot+"|"+source.id),started=now();
   const claim=await pool.query(
    "INSERT INTO source_connector_runs(id,source_id,started_at,finished_at,state,automation_status,source_url,error_code,details) VALUES($1,$2,$3,$3,'error','candidate_discovery',$4,'discovery_interrupted','{}'::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id",
