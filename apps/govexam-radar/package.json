@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test usajobs-history.test.mjs usajobs-probe.test.mjs review-sign.test.mjs reviewed-catalog.test.mjs recruitment-evidence.test.mjs recruitment-post-tables.test.mjs recruitment-events.test.mjs recruitment-ledger.test.mjs encrypted-backup.test.mjs worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs ssb-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs postgres-d1.test.mjs memory-cache.test.mjs self-hosted-server.test.mjs self-hosted-scheduler.test.mjs self-hosted-migrate.test.mjs source-connectors.test.mjs document-store.test.mjs source-document-collector.test.mjs postgres-import.test.mjs postgres-backup.test.mjs backup-scheduler.test.mjs self-hosted-monitor.test.mjs document-backup.test.mjs source-policy.test.mjs restore-scheduler.test.mjs recruitment-document.test.mjs recruitment-discovery.test.mjs d1-export-backup.test.mjs discovered-pdf-scheduler.test.mjs nyc-feed.test.mjs",
+    "test": "node --test usajobs-history.test.mjs usajobs-probe.test.mjs review-sign.test.mjs reviewed-catalog.test.mjs recruitment-evidence.test.mjs recruitment-post-tables.test.mjs recruitment-events.test.mjs recruitment-ledger.test.mjs encrypted-backup.test.mjs worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs ssb-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs postgres-d1.test.mjs memory-cache.test.mjs self-hosted-server.test.mjs self-hosted-scheduler.test.mjs self-hosted-migrate.test.mjs source-connectors.test.mjs document-store.test.mjs source-document-collector.test.mjs postgres-import.test.mjs postgres-backup.test.mjs backup-scheduler.test.mjs self-hosted-monitor.test.mjs document-backup.test.mjs source-policy.test.mjs restore-scheduler.test.mjs recruitment-document.test.mjs recruitment-discovery.test.mjs d1-export-backup.test.mjs discovered-pdf-scheduler.test.mjs nyc-feed.test.mjs release-check.test.mjs",
     "deploy": "node deploy.mjs",
     "collector:dry-run": "node collector-client.mjs --dry-run",
     "schedule:staging": "node schedule.mjs",
@@ -15,7 +15,7 @@
     "start": "node self-hosted-server.mjs",
     "start:scheduler": "node self-hosted-scheduler.mjs",
     "db:migrate": "node self-hosted-migrate.mjs",
-    "test:self-hosted": "node --test postgres-d1.test.mjs postgres-d1.integration.test.mjs memory-cache.test.mjs self-hosted-server.test.mjs self-hosted-scheduler.test.mjs self-hosted-migrate.test.mjs postgres-import.test.mjs postgres-backup.test.mjs backup-scheduler.test.mjs self-hosted-monitor.test.mjs source-connectors.test.mjs document-store.test.mjs source-document-collector.test.mjs recruitment-document.test.mjs document-backup.test.mjs source-policy.test.mjs restore-scheduler.test.mjs recruitment-discovery.test.mjs d1-export-backup.test.mjs discovered-pdf-scheduler.test.mjs nyc-feed.test.mjs",
+    "test:self-hosted": "node --test postgres-d1.test.mjs postgres-d1.integration.test.mjs memory-cache.test.mjs self-hosted-server.test.mjs self-hosted-scheduler.test.mjs self-hosted-migrate.test.mjs postgres-import.test.mjs postgres-backup.test.mjs backup-scheduler.test.mjs self-hosted-monitor.test.mjs source-connectors.test.mjs document-store.test.mjs source-document-collector.test.mjs recruitment-document.test.mjs document-backup.test.mjs source-policy.test.mjs restore-scheduler.test.mjs recruitment-discovery.test.mjs d1-export-backup.test.mjs discovered-pdf-scheduler.test.mjs nyc-feed.test.mjs release-check.test.mjs",
     "import:plan": "node postgres-import.mjs plan",
     "import:apply": "node postgres-import.mjs apply",
     "backup:once": "node postgres-backup.mjs",
@@ -27,7 +27,8 @@
     "backup:restore-test": "node postgres-restore-test.mjs",
     "backup:document-verify": "node document-backup.mjs",
     "source-policy:review": "node source-policy-admin.mjs review",
-    "backup:restore-scheduler": "node restore-scheduler.mjs"
+    "backup:restore-scheduler": "node restore-scheduler.mjs",
+    "release:check": "node release-check.mjs"
   },
   "dependencies": {
     "pg": "8.16.3"
