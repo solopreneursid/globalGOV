@@ -45,8 +45,8 @@ test("atomic output does not overwrite existing release or leave an invalid dire
 });
 function dbFixture(){
  const sql=new DatabaseSync(":memory:");
- sql.exec("CREATE TABLE source_ingest_runs(id TEXT,source_id TEXT,started_at INTEGER,finished_at INTEGER,state TEXT,details TEXT,error_code TEXT); CREATE TABLE official_job_notices(id TEXT,source_id TEXT,title TEXT,employer TEXT,region TEXT,source_page TEXT,closing_at TEXT,last_seen_at INTEGER,review_state TEXT,life_status TEXT);");
- sql.prepare("INSERT INTO official_job_notices VALUES(?,?,?,?,?,?,?,?,?,?)").run("test",...Object.values(row));
+ sql.exec("CREATE TABLE source_ingest_runs(id TEXT,source_id TEXT,started_at INTEGER,finished_at INTEGER,state TEXT,details TEXT,error_code TEXT); CREATE TABLE official_job_notices(id TEXT,source_id TEXT,title TEXT,employer TEXT,region TEXT,source_page TEXT,closing_at TEXT,last_seen_at INTEGER,review_state TEXT,life_status TEXT,source_ref TEXT);");
+ sql.prepare("INSERT INTO official_job_notices VALUES(?,?,?,?,?,?,?,?,?,?,?)").run("test",...Object.values(row),"test-ref");
  const add=sql.prepare("INSERT INTO source_ingest_runs VALUES(?,?,?,?,?,?,?)");
  for(const t of [now-hour,now-4*hour])add.run(String(t),row.source_id,t,t+100,"ok",'{"origin":"scheduled"}',null);
  return sql;
@@ -90,4 +90,44 @@ test("deployment preflight refuses production, external domains and absent appro
  await assert.rejects(verifyStaticTarget({account,token,approved:"true",fetcher,now}),/unexpected/);
  project.production_branch="main";project.domains.push("globalgov.example.com");
  await assert.rejects(verifyStaticTarget({account,token,approved:"true",fetcher,now}),/unexpected/);
+});
+
+test("individual page is unchanged after refresh, changed on amendment and absent on withdrawal",async()=>{
+ const second={...row,source_page:"https://teaching-vacancies.service.gov.uk/jobs/second",title:"Second vacancy"};
+ const a=compileCatalogue({...snapshot,rows:[row,second]});
+ const b=compileCatalogue({...snapshot,generatedAt:now+1000,rows:[{...row,last_seen_at:now},second]});
+ const p=[...a.files.keys()].find(p=>p.startsWith("job/")&&a.files.get(p).includes("Synthetic &lt;test&gt;"));
+ assert.equal(a.files.get(p),b.files.get(p));
+ assert.match(b.files.get(p),/article hidden data-job-id=/);
+ const amended=compileCatalogue({...snapshot,rows:[{...row,title:"Amended"},second]});
+ assert.notEqual(amended.files.get(p),a.files.get(p));
+ const withdrawn=compileCatalogue({...snapshot,rows:[second]});
+ assert.equal(withdrawn.files.has(p),false);
+ const root=await mkdtemp(join(tmpdir(),"globalgov-incremental-"));
+ try{
+  const first=join(root,"first"),next=join(root,"next");
+  await buildRelease({snapshot:{...snapshot,rows:[row,second]},output:first});
+  const r=await buildRelease({snapshot:{...snapshot,generatedAt:now+1000,rows:[second]},output:next,previous:first});
+  assert.ok(r.reusedAssets>0);assert.ok(r.changedAssets>0);
+  await assert.rejects(readFile(join(next,"public",p)),/ENOENT/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test("ISRO requires complete native snapshots and latest membership independently of UK",()=>{
+ const db=dbFixture(),source="india-isro-opportunities";
+ try{
+  const add=db.prepare("INSERT INTO source_ingest_runs VALUES(?,?,?,?,?,?,?)");
+  for(const t of [now-hour,now-4*hour])add.run(source+t,source,t,t+100,"ok",'{"origin":"scheduled","snapshot":"complete"}',null);
+  const insert=db.prepare("INSERT INTO official_job_notices VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+  const india={...row,source_id:source,title:"Synthetic Indian engineer",employer:"ISRO",region:"ISRO",source_page:"https://www.isro.gov.in/Recruitment.html",last_seen_at:now-hour};
+  insert.run("india-current",...Object.values(india),"india-ref");
+  insert.run("india-old",...Object.values({...india,last_seen_at:now-hour-1}),"old-ref");
+  const args=[row.source_id,now-8*hour,2*hour,now-5*hour,now+60000,row.source_id,new Date(now).toISOString(),now-5*86400000,10001];
+  const rows=db.prepare(SNAPSHOT_SQL).all(...args);
+  assert.equal(rows.length,2);
+  const release=compileCatalogue({...snapshot,rows});
+  assert.deepEqual(release.manifest.sources,[source,row.source_id]);
+  assert.ok([...release.files.keys()].some(p=>p.startsWith("jobs/india/")));
+  add.run("india-failed",source,now-500,now-400,"error","failed","network");
+  assert.equal(db.prepare(SNAPSHOT_SQL).all(...args).length,1);
+ }finally{db.close();}
 });
