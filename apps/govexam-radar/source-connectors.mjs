@@ -187,7 +187,7 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
   const agent = userAgent.toLowerCase();
   const matching = groups.filter(g => g.agents.some(a => a === "*" || (a && agent.includes(a))));
   if (!matching.length) return { allowed: true, matchedRule: null };
-  const specificity = Math.max(...matching.flatMap(g => g.agents.map(a => a === "*" ? 0 : a.length)));
+  const specificity = Math.max(...matching.flatMap(g => g.agents.filter(a=>a==="*"||agent.includes(a)).map(a => a === "*" ? 0 : a.length)));
   const selected=matching.filter(g => g.agents.some(a => a === "*" ? specificity===0 : agent.includes(a)&&a.length===specificity));
   const rules=selected.flatMap(g=>g.rules);
   const delayMs=Math.max(0,...selected.map(g=>g.delayMs));
