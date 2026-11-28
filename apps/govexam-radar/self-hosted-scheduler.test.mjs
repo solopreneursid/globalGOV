@@ -64,3 +64,18 @@ test("does not execute a slot already claimed by another scheduler", async () =>
   assert.equal(result.state, "already_claimed");
   assert.equal(invoked, false);
 });
+
+test("reported collector failure is persisted as a failed schedule slot",async()=>{
+ const calls=[];
+ const db={prepare(sql){return{bind(...values){return{run:async()=>{calls.push({sql,values});return{meta:{changes:1}};}};}};}};
+ const slot=scheduledSlot(Date.UTC(2026,10,27,0,20,0));
+ await assert.rejects(runScheduledSlot({db,slot,env:{DB:db},workerImpl:{async scheduled(c,e,ctx){ctx.waitUntil(Promise.resolve({state:"error"}));}},logger:{info(){},error(){}}}),/scheduled_source_failed/);
+ assert.ok(calls.some(x=>x.sql.includes("state='error'")));
+ assert.ok(!calls.some(x=>x.sql.includes("state='ok'")));
+});
+test("daily discovery runs only at the claimed midnight portal slot",async()=>{
+ const db={prepare(){return{bind(){return{run:async()=>({meta:{changes:1}})};}};}};
+ const slots=[];
+ for(const hour of [0,3])await runScheduledSlot({db,slot:scheduledSlot(Date.UTC(2026,10,27,hour,0,0)),env:{DB:db},workerImpl:{async scheduled(){}},discovery:async s=>{slots.push(s);return[];},logger:{info(){},error(){}}});
+ assert.equal(slots.length,1);assert.match(slots[0],/T00:00:00/);
+});
