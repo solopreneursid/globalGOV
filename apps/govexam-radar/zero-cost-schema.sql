@@ -14,3 +14,11 @@ CREATE TABLE IF NOT EXISTS zero_cost_runs (
  fetches INTEGER NOT NULL DEFAULT 0, error_code TEXT
 );
 CREATE INDEX IF NOT EXISTS zero_cost_runs_day ON zero_cost_runs(day);
+
+-- Per-run reservation: 25k read rows, 1500 write rows, 4 network fetches.
+-- At most eight UTC slots per day; no refund on failure.
+CREATE TRIGGER IF NOT EXISTS zero_cost_reserve AFTER INSERT ON zero_cost_runs
+BEGIN
+ UPDATE zero_cost_days SET reserved_reads=reserved_reads+25000,
+ reserved_writes=reserved_writes+1500,reserved_fetches=reserved_fetches+4 WHERE day=NEW.day;
+END;
