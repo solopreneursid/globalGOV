@@ -7,9 +7,9 @@ import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { extractPdfText } from "./recruitment-document.mjs";
 import { fetchOfficialSource } from "./source-connectors.mjs";
 import { getApprovedSourcePolicy } from "./source-policy.mjs";
-import { extractRecruitmentEvidence } from "./recruitment-evidence.mjs";
+import { extractRecruitmentEvidence, officialDocumentUrl } from "./recruitment-evidence.mjs";
 import { storePdf, storeManualEvidencePdf } from "./document-store.mjs";
-import { SOURCES } from "./worker.js";
+import { POLICY_SOURCES } from "./worker.js";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -69,7 +69,7 @@ export async function collectOfficialRecruitmentDocument({
 } = {}) {
   if (!root) throw new Error("document_store_directory_required");
   if (!pool || typeof pool.query !== "function") throw new Error("postgres_pool_required");
-  const source = SOURCES.find(item => item.id === sourceId);
+  const source = POLICY_SOURCES.find(item => item.id === sourceId);
   if (!source) throw new Error("unknown_registered_source");
   const startedAt = now;
   let policy = null;
@@ -77,11 +77,14 @@ export async function collectOfficialRecruitmentDocument({
   try {
     policy = await getApprovedSourcePolicy(pool, source, now);
     if (!policy) throw new Error("source_automation_not_approved_by_reviewed_policy");
+    officialDocumentUrl(sourceId, sourceUrl);
+    if (!policy.allowedContentTypes.includes("application/pdf")) throw new Error("pdf_access_not_approved");
     fetched = await fetchOfficialSource({
       source, url: sourceUrl, fetcher, policyOverride: policy,
       maxBytes: policy.maxBytes, minIntervalMs: policy.minIntervalMs
     });
-    const bytes = fetched.bytes;
+    if (fetched.contentType !== "application/pdf") throw new Error("official_pdf_content_type_required");
+    const bytes = Buffer.from(fetched.bytes);
     const stored = await storePdf({ root, bytes });
     const text = extractPdfText(bytes);
     const report = extractRecruitmentEvidence({
@@ -183,7 +186,7 @@ async function main() {
     if (mode === "fetch") {
       result = await collectOfficialRecruitmentDocument({ sourceId, sourceUrl, pool });
     } else {
-      const source = SOURCES.find(item => item.id === sourceId);
+      const source = POLICY_SOURCES.find(item => item.id === sourceId);
       if (!source) throw new Error("unknown_registered_source");
       result = await registerManualRecruitmentDocument({ source, sourceUrl, filePath, pool });
     }
