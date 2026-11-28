@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  mergeSourcePolicySources, seedSourcePolicyRegistry, getApprovedSourcePolicy, recordSourcePolicyReview, sourcePolicyAllowsUrl
+  mergeSourcePolicySources, seedSourcePolicyRegistry, getApprovedSourcePolicy, getScheduledSourcePolicy, recordSourcePolicyReview, sourcePolicyAllowsUrl
 } from "./source-policy.mjs";
 
 const source = { id: "ssb", url: "https://recruitment.ssb.gov.in/" };
@@ -112,4 +112,17 @@ test("policy seeding retains every permitted content type for a reviewed RSS end
   assert.deepEqual(methods.map(item => item.contentType).sort(),
     ["application/rss+xml", "application/xml", "text/xml"]);
   assert.ok(methods.every(item => item.path === "/rss/newJobPostingsFeed.rss"));
+});
+
+test("only exact documented adapters may use a repository public-policy seed", async () => {
+ const dfe={id:"uk-dfe-teaching-vacancies",url:"https://teaching-vacancies.service.gov.uk/api/v1/jobs.json"};
+ const isro={id:"india-isro-opportunities",url:"https://www.isro.gov.in/ViewAllOpportunities.html"};
+ const seed={automated_access_status:"approved",reuse_status:"conditional",reviewer_label:"repository-policy-seed",reviewed_at:null,expires_at:null};
+ const pool=row=>({query:async()=>({rows:row?[row]:[]})});
+ assert.equal((await getScheduledSourcePolicy(pool(seed),dfe)).policyBasis,"versioned_source_specific_terms_and_runtime_robots");
+ assert.equal((await getScheduledSourcePolicy(pool({...seed,automated_access_status:"not_assessed"}),isro)).host,"www.isro.gov.in");
+ for(const row of [null,{...seed,automated_access_status:"denied"},{...seed,reuse_status:"not_approved"},{...seed,reviewer_label:"founder",expires_at:1}])
+   assert.equal(await getScheduledSourcePolicy(pool(row),dfe),null);
+ assert.equal(await getScheduledSourcePolicy(pool(seed),{...dfe,url:"https://teaching-vacancies.service.gov.uk/private"}),null);
+ assert.equal(await getScheduledSourcePolicy(pool(seed),source),null);
 });
