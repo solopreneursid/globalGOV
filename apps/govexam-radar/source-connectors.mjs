@@ -124,6 +124,29 @@ export function buildSourceConnectorInventory(sources) {
   });
 }
 
+// Normalize unreserved percent escapes, preserve reserved escapes, and encode
+// non-ASCII octets. Keep the wildcard syntax separate from escaped literals.
+function robotsNormalize(value) {
+ if (/%(?![a-f0-9]{2})/i.test(value) || /[\u0000-\u0020\u007f]/.test(value)) throw Error("robots_rule_syntax_unconfirmed");
+ return value.replace(/%([a-f0-9]{2})/gi,(_,hex)=>{
+  const ch=String.fromCharCode(parseInt(hex,16));
+  return /^[a-z0-9._~-]$/i.test(ch)?ch:"%"+hex.toUpperCase();
+ }).replace(/[^\x00-\x7f]/gu,ch=>encodeURIComponent(ch));
+}
+function robotsMatches(pattern,path) {
+ const exact=pattern.endsWith("$");
+ const value=exact?pattern.slice(0,-1):pattern;
+ // Dynamic programming: bounded O(pattern length * path length), no regex backtracking.
+ if(!value.includes("*"))return exact?path===value:path.startsWith(value);
+ let prev=new Uint8Array(path.length+1);prev[0]=1;
+ for(const ch of value){
+  const next=new Uint8Array(path.length+1);
+  if(ch==="*"){next[0]=prev[0];for(let j=1;j<=path.length;j++)next[j]=prev[j]||next[j-1];}
+  else for(let j=1;j<=path.length;j++)next[j]=prev[j-1]&&path[j-1]===ch?1:0;
+  prev=next;
+ }
+ return exact?Boolean(prev[path.length]):prev.includes(1);
+}
 export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/") {
   if (typeof text !== "string" || new TextEncoder().encode(text).byteLength > 8192) {
     throw new Error("robots_document_invalid");
@@ -142,17 +165,20 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
         throw new Error("robots_user_agent_syntax_unconfirmed");
       }
       if (!group || group.hasRules) {
-        group = { agents: [], rules: [], hasRules: false };
+        group = { agents: [], rules: [], hasRules: false, delayMs: 0 };
         groups.push(group);
       }
       group.agents.push(value.toLowerCase());
+    } else if (group && key === "crawl-delay") {
+      if(!/^\d+(?:\.\d+)?$/.test(value)||Number(value)>300)throw Error("robots_crawl_delay_unconfirmed");
+      group.delayMs=Math.max(group.delayMs,Math.ceil(Number(value)*1000));
     } else if (group && ["allow", "disallow"].includes(key)) {
       group.hasRules = true;
       if (value) {
-        if (!value.startsWith("/") || /[*$]/.test(value)) {
+        if (!value.startsWith("/") || value.length>2048 || /\$(?!$)/.test(value)) {
           throw new Error("robots_rule_syntax_unconfirmed");
         }
-        group.rules.push({ allow: key === "allow", path: value });
+        group.rules.push({ allow: key === "allow", path: value, normalized: robotsNormalize(value) });
       }
     }
   }
@@ -160,18 +186,19 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
   const matching = groups.filter(g => g.agents.some(a => a === "*" || (a && agent.includes(a))));
   if (!matching.length) return { allowed: true, matchedRule: null };
   const specificity = Math.max(...matching.flatMap(g => g.agents.map(a => a === "*" ? 0 : a.length)));
-  const rules = matching
-    .filter(g => g.agents.some(a => (a === "*" ? 0 : a.length) === specificity))
-    .flatMap(g => g.rules);
+  const selected=matching.filter(g => g.agents.some(a => a === "*" ? specificity===0 : agent.includes(a)&&a.length===specificity));
+  const rules=selected.flatMap(g=>g.rules);
+  const delayMs=Math.max(0,...selected.map(g=>g.delayMs));
   if (typeof requestPath !== "string" || !requestPath.startsWith("/")) throw new Error("robots_request_path_invalid");
-  const path = requestPath;
+  if(requestPath.length>4096)throw Error("robots_request_path_invalid");
+  const path = robotsNormalize(requestPath);
   let best = null;
   for (const rule of rules) {
-    if (!path.startsWith(rule.path)) continue;
-    if (!best || rule.path.length > best.path.length ||
-      (rule.path.length === best.path.length && rule.allow && !best.allow)) best = rule;
+    if (!robotsMatches(rule.normalized,path)) continue;
+    if (!best || rule.normalized.length > best.normalized.length ||
+      (rule.normalized.length === best.normalized.length && rule.allow && !best.allow)) best = rule;
   }
-  return { allowed: best ? best.allow : true, matchedRule: best };
+  return { allowed: best ? best.allow : true, matchedRule: best ? {allow:best.allow,path:best.path} : null, delayMs };
 }
 
 async function readBounded(response, maxBytes) {
@@ -258,6 +285,7 @@ export async function fetchOfficialSource({
     signal: AbortSignal.timeout(12000),
     headers: { "User-Agent": userAgent, "Accept": "text/plain" }
   });
+  let crawlDelayMs=0;
   if (robots.status === 404) {
     await robots.body?.cancel().catch(() => {});
   } else if (robots.status === 200) {
@@ -268,12 +296,13 @@ export async function fetchOfficialSource({
     const robotsBody = new TextDecoder("utf-8", { fatal: true }).decode(await readBounded(robots, 8192));
     const decision = parseRobotsRules(robotsBody, userAgent, target.pathname + target.search);
     if (!decision.allowed) throw new Error("robots_disallow");
+    crawlDelayMs=decision.delayMs||0;
   } else {
     await robots.body?.cancel().catch(() => {});
     throw new Error("robots_access_unconfirmed_" + robots.status);
   }
 
-  await serializeHostStart(policy.host, minIntervalMs, now, sleep);
+  await serializeHostStart(policy.host, Math.max(minIntervalMs,crawlDelayMs), now, sleep);
   const response = await fetcher(target, {
     method: "GET",
     redirect: "manual",
