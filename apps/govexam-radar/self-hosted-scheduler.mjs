@@ -52,14 +52,22 @@ export async function runScheduledSlot({ db, workerImpl = worker, env, slot, now
       env,
       { waitUntil: promise => pending.push(Promise.resolve(promise)) }
     );
-    await Promise.all(pending);
+    const outcomes = await Promise.all(pending);
+    // Worker adapters can return a failed result without rejecting the promise.
+    // A blocked source is intentionally disabled, not a successful ingestion.
+    for (const outcome of outcomes) {
+      if (outcome?.state === "error" || outcome?.state === "rejected" ||
+          Object.values(outcome || {}).some(value => value === "rejected" || value?.state === "error" || value?.state === "rejected")) {
+        throw new Error("scheduled_source_failed");
+      }
+    }
     if (discovery && slot.task === "portals" && new Date(slot.scheduledTime).getUTCHours() === 0) {
       const outcomes = await discovery(slot.slot);
       logger.info?.(JSON.stringify({event:"recruitment_discovery_complete",outcomes}));
     }
     await db.prepare(
       "UPDATE scheduler_runs SET state='ok',finished_at=?,error_code=NULL,details=? WHERE slot=? AND state='running'"
-    ).bind(Date.now(), JSON.stringify({ task: slot.task }), slot.slot).run();
+    ).bind(Date.now(), JSON.stringify({ task: slot.task, outcomes: outcomes.map(o => o?.state || (o ? "completed" : "no_result")) }), slot.slot).run();
     logger.info?.(JSON.stringify({ event: "scheduled_task_complete", task: slot.task, slot: slot.slot }));
     return { state: "ok", slot: slot.slot };
   } catch (error) {
