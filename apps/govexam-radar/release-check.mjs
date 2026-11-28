@@ -21,7 +21,8 @@ export async function inspectRelease({pool,env=process.env,fetcher=fetch,now=Dat
  const primary=imports.rows.find(x=>x.source_id==="canonical-cloudflare-d1"),uk=imports.rows.find(x=>x.source_id==="uk-isolated-cloudflare-d1");
  add("primary_import",snapshotOk(primary,env.GLOBALGOV_EXPECT_PRIMARY_SHA256,12));
  add("uk_archive_import",snapshotOk(uk,env.GLOBALGOV_EXPECT_UK_SHA256,4));
- const cutoff=Math.max(Number(primary?.finished_at)||now,Number(uk?.finished_at)||now,now-12*HOUR);
+ const migrationCutoff=Math.max(Number(primary?.finished_at)||now,Number(uk?.finished_at)||now);
+ const cutoff=Math.max(migrationCutoff,now-12*HOUR);
  const sources=["uk-dfe-teaching-vacancies",...(env.GLOBALGOV_NYC_PUBLICATION==="true"?[NYC_SOURCE.id]:[])];
  for(const source of sources){
   const result=await pool.query("SELECT state,started_at,finished_at,accepted FROM source_ingest_runs WHERE source_id=$1 AND started_at>$2 AND details LIKE '%\"origin\":\"scheduled\"%' ORDER BY started_at DESC,finished_at DESC LIMIT 2",[source,cutoff]);
@@ -32,12 +33,11 @@ export async function inspectRelease({pool,env=process.env,fetcher=fetch,now=Dat
  add("owner_scheduler",schedule.rows.length===2&&schedule.rows.every(r=>r.state==="ok")&&fresh(schedule.rows[0]?.finished_at,now,5*HOUR));
  const backup=await pool.query("SELECT state,finished_at,archive_verified_at,document_archive_verified_at,local_sha256,remote_sha256,document_archive_sha256,remote_document_sha256,remote_target FROM backup_runs ORDER BY started_at DESC LIMIT 1");
  const b=backup.rows[0];
- add("fresh_off_host_copy",b?.state==="ok"&&fresh(b.finished_at,now,36*HOUR)&&Number(b.finished_at)>cutoff&&b.remote_target&&HASH.test(String(b.local_sha256))&&b.local_sha256===b.remote_sha256&&HASH.test(String(b.document_archive_sha256))&&b.document_archive_sha256===b.remote_document_sha256&&fresh(b.archive_verified_at,now,36*HOUR)&&fresh(b.document_archive_verified_at,now,36*HOUR));
- const restore=await pool.query("SELECT MAX(restore_verified_at) AS db_restore,MAX(document_restore_verified_at) AS docs_restore FROM backup_runs WHERE state='ok' AND finished_at>$1 AND restore_verified_at IS NOT NULL AND document_restore_verified_at IS NOT NULL",[cutoff]);
+ add("fresh_off_host_copy",b?.state==="ok"&&fresh(b.finished_at,now,36*HOUR)&&Number(b.finished_at)>migrationCutoff&&b.remote_target&&HASH.test(String(b.local_sha256))&&b.local_sha256===b.remote_sha256&&HASH.test(String(b.document_archive_sha256))&&b.document_archive_sha256===b.remote_document_sha256&&fresh(b.archive_verified_at,now,36*HOUR)&&fresh(b.document_archive_verified_at,now,36*HOUR));
+ const restore=await pool.query("SELECT MAX(restore_verified_at) AS db_restore,MAX(document_restore_verified_at) AS docs_restore FROM backup_runs WHERE state='ok' AND finished_at>$1 AND restore_verified_at IS NOT NULL AND document_restore_verified_at IS NOT NULL",[migrationCutoff]);
  add("isolated_restore",fresh(restore.rows[0]?.db_restore,now,30*DAY)&&fresh(restore.rows[0]?.docs_restore,now,30*DAY));
  const critical=await pool.query("SELECT COUNT(*)::integer AS count FROM system_health_events WHERE severity='critical' AND resolved_at IS NULL");
  add("no_open_critical_incidents",Number(critical.rows[0]?.count)===0);
- const monitor=await pool.query("SELECT MAX(occurred_at) AS observed FROM system_health_events");
  // The watchdog only writes incidents; absence is not proof it is running.
  // Verify application readiness separately; independent host/security and remote
  // restore checks must be performed by the release operator.
@@ -47,9 +47,11 @@ export async function inspectRelease({pool,env=process.env,fetcher=fetch,now=Dat
   if(!["http:","https:"].includes(origin.protocol)||origin.username||origin.password)throw Error("invalid_health_origin");
   const res=await fetcher(new URL("/internal/ready",origin),{signal:AbortSignal.timeout(5000),redirect:"error"});
   add("application_ready",res.ok&&(await res.json()).status==="ok");
-  const feed=await fetcher(new URL("/api/notices?limit=1",origin),{signal:AbortSignal.timeout(5000),redirect:"error"});
-  const data=await feed.json();
-  add("public_catalogue",feed.ok&&Array.isArray(data.notices)&&Number.isSafeInteger(data.total)&&data.total>0&&data.notices.every(n=>sources.includes(n.sourceId)||["india-isro-opportunities","india-ssb-recruitment"].includes(n.sourceId)));
+  for(const source of sources){
+   const url=new URL("/api/notices",origin);url.searchParams.set("limit","1");url.searchParams.set("source",source);
+   const feed=await fetcher(url,{signal:AbortSignal.timeout(5000),redirect:"error"}),data=await feed.json();
+   add("public_catalogue:"+source,feed.ok&&Array.isArray(data.notices)&&data.notices.length===1&&Number.isSafeInteger(data.total)&&data.total>0&&data.notices.every(n=>n.sourceId===source));
+  }
  }catch{add("application_http",false);}
  return {state:checks.every(c=>c.passed)?"engineering_gates_passed":"blocked",checkedAt:new Date(now).toISOString(),checks,publicLaunchAuthorized:false,remainingIndependentChecks:["host firewall and TLS","restore from remote backup copy","owner production routing approval"]};
 }
