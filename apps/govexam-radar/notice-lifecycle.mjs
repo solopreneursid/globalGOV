@@ -1,6 +1,5 @@
 // Evidence-based notice lifecycle. A missing notice on a partial page is NOT a withdrawal.
-import {NYC_SOURCE} from "./nyc-feed.mjs";
-import {allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
+import {NYC_SOURCE,allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
 import {ISRO_SOURCE,isroPublicationGate} from "./isro-feed.mjs";
 import {SSB_SOURCE,ssbPublicationGate} from "./ssb-feed.mjs";
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
