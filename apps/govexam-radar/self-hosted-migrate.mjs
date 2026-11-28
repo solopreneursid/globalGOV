@@ -139,20 +139,10 @@ async function main() {
   try {
     const results = await applyMigrations(pool, migrations);
     const roleGrants = await applyRuntimeRoleGrants(pool, process.env);
-    const [
-      { SOURCES }, { seedSourcePolicyRegistry, mergeSourcePolicySources },
-      { DFE_SOURCE }, { MANITOBA }, { ISRO_SOURCE }, { SSB_SOURCE }
-    ] = await Promise.all([
-      import("./worker.js"), import("./source-policy.mjs"),
-      import("./official-feed.mjs"), import("./manitoba-feed.mjs"),
-      import("./isro-feed.mjs"), import("./ssb-feed.mjs")
+    const [{ POLICY_SOURCES }, { seedSourcePolicyRegistry }] = await Promise.all([
+      import("./worker.js"), import("./source-policy.mjs")
     ]);
-    const adapterSources = [
-      { id: DFE_SOURCE.id, name: DFE_SOURCE.name, country: DFE_SOURCE.country, url: DFE_SOURCE.api },
-      MANITOBA, ISRO_SOURCE, SSB_SOURCE
-    ];
-    const policySources = mergeSourcePolicySources(SOURCES, adapterSources);
-    const sourcePolicies = await seedSourcePolicyRegistry(pool, policySources);
+    const sourcePolicies = await seedSourcePolicyRegistry(pool, POLICY_SOURCES);
     console.log(JSON.stringify({
       status: "ok", directory: String(directory), migrations: results,
       roleGrants, sourcePolicies
