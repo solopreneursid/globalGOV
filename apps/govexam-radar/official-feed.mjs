@@ -1,4 +1,5 @@
 // GovRadar government recruitment feed adapter, source-bound and portable SQLite/D1.
+import { NYC_SOURCE } from "./nyc-feed.mjs";
 import { INDIA_EMPLOYMENT_NEWS } from "./india-employment-news.mjs";
 import {OFFICIAL_SOURCE_RIGHTS,allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
 import {ISRO_SOURCE,isroPublicationGate} from "./isro-feed.mjs";
@@ -204,12 +205,12 @@ export async function ingestDfE(db,fetcher=fetch,clock=Date.now(),meta={}){
 }
 // Multi-source public notice query: government public employment and publicly funded education
 // remain distinguishable in both metadata and each individual record.
-export async function serveOfficialNotices(db,params,scope="research"){
+export async function serveOfficialNotices(db,params,scope="research",publication=null){
  if(!db)return json({error:"not_configured",notices:[]},503);
  // Scope is a server-side Worker argument, never a public request parameter.
  if(!["research","uk_only_release_preview","approved_staging"].includes(scope))
   return json({error:"unknown_release_profile",notices:[]},503);
- let releaseSourceIds=null,isroGate={ready:false},ssbGate={ready:false};
+ let releaseSourceIds=null,isroGate={ready:false},ssbGate={ready:false},nycGate=publication?.nycGate||{ready:false};
  if(scope==="uk_only_release_preview"||scope==="approved_staging"){
   try{
    releaseSourceIds=allowedCommercialPreviewSources();
@@ -218,16 +219,18 @@ export async function serveOfficialNotices(db,params,scope="research"){
     if(isroGate.ready)releaseSourceIds.push(id);
     const ssbId=allowedSsbPreviewSource();ssbGate=await ssbPublicationGate(db);
     if(ssbGate.ready)releaseSourceIds.push(ssbId);
+    if(nycGate.ready)releaseSourceIds.push(NYC_SOURCE.id);
    }
   }
   catch{return json({error:"commercial_release_rights_not_approved",notices:[]},503);}
+  if(publication)releaseSourceIds=releaseSourceIds.filter(id=>publication.allowedIds.includes(id));
  }
  try{
   const limit=Math.min(50,Math.max(1,Number(params.get("limit"))||18));
   const page=Math.max(1,Math.min(1000,Number(params.get("page"))||1));
   const keyword=plain(params.get("q"),60);
   const stream=["Technical","Non-technical","Unclassified"].includes(params.get("stream"))?params.get("stream"):"";
-  const allowedSources=[DFE_SOURCE.id,"manitoba-jobs",INDIA_EMPLOYMENT_NEWS.id,ISRO_SOURCE.id,SSB_SOURCE.id];
+  const allowedSources=[DFE_SOURCE.id,"manitoba-jobs",INDIA_EMPLOYMENT_NEWS.id,ISRO_SOURCE.id,SSB_SOURCE.id,NYC_SOURCE.id];
   const requestedSource=params.get("source");
   if(releaseSourceIds && requestedSource && !releaseSourceIds.includes(requestedSource))
    return json({error:"source_not_approved_for_release_preview",notices:[],sources:[]},403);
@@ -243,13 +246,13 @@ export async function serveOfficialNotices(db,params,scope="research"){
   // Authoritative query-bound source restriction. Client-side filters cannot
   // bypass it (including country, page, keyword and absent source).
   if(releaseSourceIds){
-   where.push("source_id IN ("+releaseSourceIds.map(()=>"?").join(",")+")");
+   where.push("source_id IN ("+(releaseSourceIds.map(()=>"?").join(",")||"NULL")+")");
    bind.push(...releaseSourceIds);
   }
   // ISRO serves a complete snapshot. Only rows observed in its latest fully
   // successful run may be displayed; a vanished row is withheld, not called
   // withdrawn. Incomplete/failed runs close the gate before any row is shown.
-  if(scope==="approved_staging")for(const [source,gate] of [[ISRO_SOURCE,isroGate],[SSB_SOURCE,ssbGate]])if(gate.ready){
+  if(scope==="approved_staging")for(const [source,gate] of [[ISRO_SOURCE,isroGate],[SSB_SOURCE,ssbGate],[NYC_SOURCE,nycGate]])if(gate.ready&&releaseSourceIds.includes(source.id)){
    where.push("(source_id!=? OR (last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))");
    bind.push(source.id,gate.snapshotAt,source.id,gate.snapshotAt,gate.snapshotAt);
   }
@@ -260,7 +263,7 @@ export async function serveOfficialNotices(db,params,scope="research"){
   if(stream){where.push("stream=?");bind.push(stream);}
   if(keyword){where.push("(title LIKE ? OR employer LIKE ? OR region LIKE ? OR jurisdiction_name LIKE ?)");bind.push(...Array(4).fill("%"+keyword+"%"));}
   const sqlWhere=where.join(" AND ");
-  const rows=await db.prepare("SELECT id,source_id as sourceId,title,employer,country,region,stream,source_page as sourceUrl,published_at as publishedAt,closing_at as closingAt,first_seen_at as firstSeenAt,last_seen_at as lastSeenAt,review_state as reviewState,jurisdiction_code as jurisdictionCode,jurisdiction_name as jurisdiction,government_tier as level,employer_type as employerType FROM official_job_notices WHERE "+sqlWhere+" ORDER BY last_seen_at DESC,id ASC LIMIT ? OFFSET ?")
+  const rows=await db.prepare("SELECT id,source_id as sourceId,title,employer,country,region,stream,source_page as sourceUrl,source_ref as sourceReference,published_at as publishedAt,closing_at as closingAt,first_seen_at as firstSeenAt,last_seen_at as lastSeenAt,review_state as reviewState,jurisdiction_code as jurisdictionCode,jurisdiction_name as jurisdiction,government_tier as level,employer_type as employerType FROM official_job_notices WHERE "+sqlWhere+" ORDER BY last_seen_at DESC,id ASC LIMIT ? OFFSET ?")
    .bind(...bind,limit,(page-1)*limit).all();
   const total=await db.prepare("SELECT COUNT(*) AS total FROM official_job_notices WHERE "+sqlWhere).bind(...bind).first();
   // Rights must be scoped to each source; OGL covers only the UK DfE data.
@@ -271,6 +274,7 @@ export async function serveOfficialNotices(db,params,scope="research"){
    if(rights.id==="manitoba-jobs")return{...rights,name:"Government of Manitoba Job Opportunities",
     country:"Canada",jurisdiction:"Manitoba",level:"province",employerType:"provincial_government"};
    if(rights.id===ISRO_SOURCE.id)return{...rights,name:ISRO_SOURCE.name,country:"India",jurisdiction:"India",level:"national",employerType:"government_agency"};
+   if(rights.id===NYC_SOURCE.id)return{...rights,name:NYC_SOURCE.name,country:NYC_SOURCE.country,jurisdiction:"New York City",level:"municipal",employerType:"government_agency"};
    if(rights.id===SSB_SOURCE.id)return{...rights,name:SSB_SOURCE.name,country:"India",jurisdiction:"India",level:"national",employerType:"government_agency"};
    return{...rights,name:INDIA_EMPLOYMENT_NEWS.name,country:"India",jurisdiction:"India",
     level:"unclassified",employerType:"government_recruitment_digest"};
@@ -280,7 +284,7 @@ export async function serveOfficialNotices(db,params,scope="research"){
    publicLaunchAuthorized:false,
    ...(scope==="approved_staging"?{indiaSourceCheck:{ready:isroGate.ready,lastCheckAt:isroGate.lastCheckAt||null,successfulCycles:isroGate.successfulCycles||0},indiaSourceChecks:{[ISRO_SOURCE.id]:isroGate,[SSB_SOURCE.id]:ssbGate}}:{}),
    filters:{source:sourceId,country,jurisdiction,level,stream,keyword},
-   disclaimer:"Government employer and public education sector listings are distinguished. Records come from official sources, but every vacancy, eligibility and exact closing time must be confirmed on the original authority's site. Indian date-only closing fields use the end of the Indian calendar day as a visibility boundary, not a verified application deadline. An India Employment News research row is a summary index, not an independently verified employer vacancy."});
+   disclaimer:"Government employer and public education sector listings are distinguished. Records come from official sources, but every vacancy, eligibility and exact closing time must be confirmed on the original authority's site. Indian date-only closing fields use the end of the Indian calendar day as a visibility boundary, not a verified application deadline. NYC date-only deadlines use a conservative start-of-day visibility boundary in New York; search the official city jobs portal by job ID. An India Employment News research row is a summary index, not an independently verified employer vacancy."});
  }catch(e){console.error(JSON.stringify({event:"official_notices_read_failed",reason:String(e?.message||e)}));return json({error:"temporarily_unavailable",notices:[]},503);}
 }
 export async function serveIngestionStatus(db){
@@ -328,20 +332,22 @@ export async function serveIngestionStatus(db){
 // This status endpoint is safe to expose alongside the public-preview feed:
 // its SQL reads only explicitly approved sources, including run details and
 // counts. It cannot be widened by request parameters or a new adapter.
-export async function servePublicIngestionStatus(db){
+export async function servePublicIngestionStatus(db,publication=null){
  if(!db)return json({error:"not_configured"},503);
  try{
   const gate=await isroPublicationGate(db),candidate=allowedIsroPreviewSource();
   const ssbGate=await ssbPublicationGate(db),ssbCandidate=allowedSsbPreviewSource();
   const checks=new Map([[candidate,gate],[ssbCandidate,ssbGate]]);
+  if(publication?.nycGate)checks.set(NYC_SOURCE.id,publication.nycGate);
   const ids=allowedCommercialPreviewSources();for(const [id,g] of checks)if(g.ready)ids.push(id);
+  const visibleIds=publication?ids.filter(id=>publication.allowedIds.includes(id)):ids;
   const auditIds=[...allowedCommercialPreviewSources(),...checks.keys()];
-  const placeholders=ids.map(()=>"?").join(","),auditPlaceholders=auditIds.map(()=>"?").join(",");
+  const placeholders=visibleIds.map(()=>"?").join(",")||"NULL",auditPlaceholders=auditIds.map(()=>"?").join(",");
   const now=Date.now(),cutoff=new Date(now).toISOString();
   const latest=await db.prepare("SELECT source_id as sourceId,started_at as startedAt,finished_at as finishedAt,state,received,accepted,discarded,error_code as errorCode FROM source_ingest_runs WHERE source_id IN ("+auditPlaceholders+") ORDER BY finished_at DESC LIMIT 8").bind(...auditIds).all();
-  const guards=[...checks].filter(([,g])=>g.ready);
+  const guards=[...checks].filter(([id,g])=>g.ready&&visibleIds.includes(id));
   const snapshotGuard=guards.map(()=>" AND (source_id!=? OR (last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))").join("");
-  const bySource=await db.prepare("SELECT source_id AS sourceId,country,jurisdiction_name AS jurisdiction,government_tier AS level,employer_type AS employerType,COUNT(*) AS count FROM official_job_notices WHERE source_id IN ("+placeholders+") AND life_status='open' AND closing_at>? AND last_seen_at>=? AND review_state IN ('official_feed_unreviewed','founder_reviewed')"+snapshotGuard+" GROUP BY source_id,country,jurisdiction_name,government_tier,employer_type").bind(...ids,cutoff,now-14*86400000,...guards.flatMap(([id,g])=>[id,g.snapshotAt,id,g.snapshotAt,g.snapshotAt])).all();
+  const bySource=await db.prepare("SELECT source_id AS sourceId,country,jurisdiction_name AS jurisdiction,government_tier AS level,employer_type AS employerType,COUNT(*) AS count FROM official_job_notices WHERE source_id IN ("+placeholders+") AND life_status='open' AND closing_at>? AND last_seen_at>=? AND review_state IN ('official_feed_unreviewed','founder_reviewed')"+snapshotGuard+" GROUP BY source_id,country,jurisdiction_name,government_tier,employer_type").bind(...visibleIds,cutoff,now-14*86400000,...guards.flatMap(([id,g])=>[id,g.snapshotAt,id,g.snapshotAt,g.snapshotAt])).all();
   const recent=await db.prepare("SELECT source_id AS sourceId,MAX(CASE WHEN state='ok' AND details LIKE '%\"origin\":\"scheduled\"%' THEN finished_at ELSE NULL END) AS lastSuccessfulScheduledAt,SUM(CASE WHEN state='ok' AND details LIKE '%\"origin\":\"scheduled\"%' AND finished_at>=? THEN 1 ELSE 0 END) AS recentNativeSuccessCount,MAX(CASE WHEN id NOT LIKE 'bootstrap-%' AND details NOT LIKE '%\"origin\":\"signed_portable_collector\"%' AND (error_code IS NULL OR error_code!='collector_claim_pending') THEN finished_at ELSE NULL END) AS lastNativeAttemptAt FROM source_ingest_runs WHERE source_id IN ("+auditPlaceholders+") GROUP BY source_id").bind(now-8*3600000,...auditIds).all();
   const sources=auditIds.map(sourceId=>{
    const row=(recent.results||[]).find(x=>x.sourceId===sourceId)||{};
