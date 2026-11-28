@@ -148,3 +148,11 @@ test("robots wildcard, anchors, encodings, precedence and crawl delays preserve 
  assert.equal(parseRobotsRules(grouped,"globalGOV","/secret").allowed,false);
  assert.equal(parseRobotsRules(grouped,"globalGOV","/public").allowed,true);
 });
+
+test("NYC-style leading wildcard disallows remain effective on actual targets",()=>{
+ const rules="User-agent: *\nCrawl-delay: 1\nDisallow: /browse?*&category=\nDisallow: */alt$\nDisallow: */edit$\nDisallow: /OData.svc/\nDisallow: /api/odata/";
+ assert.equal(parseRobotsRules(rules,"globalGOV","/resource/kpav-sd4t.json?%24limit=100").allowed,true);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/x/edit").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/OData.svc/jobs").allowed,false);
+ assert.equal(parseRobotsRules(rules,"globalGOV","/browse?a=1&category=x").allowed,false);
+});
