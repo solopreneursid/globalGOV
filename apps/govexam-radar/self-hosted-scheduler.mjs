@@ -1,5 +1,6 @@
 import worker from "./worker.js";
-import { GOVRADAR_SINGLE_CRON, govradarScheduledTask } from "./worker.js";
+import { runRecruitmentDiscovery } from "./recruitment-discovery.mjs";
+import { POLICY_SOURCES, GOVRADAR_SINGLE_CRON, govradarScheduledTask } from "./worker.js";
 import { createPostgresD1Database, createPostgresPoolFromEnv } from "./postgres-d1.mjs";
 import { pathToFileURL } from "node:url";
 
@@ -36,7 +37,7 @@ export async function recoverInterruptedRuns(db, now = Date.now()) {
   return Number(result.meta?.changes || 0);
 }
 
-export async function runScheduledSlot({ db, workerImpl = worker, env, slot, now = Date.now(), logger = console }) {
+export async function runScheduledSlot({ db, workerImpl = worker, env, slot, now = Date.now(), logger = console, discovery = null }) {
   if (!db || !slot || !env) throw new Error("scheduler_dependencies_required");
   const claim = await db.prepare(
     "INSERT INTO scheduler_runs(slot,task,state,started_at) VALUES(?,?,'running',?) ON CONFLICT(slot) DO NOTHING"
@@ -52,6 +53,10 @@ export async function runScheduledSlot({ db, workerImpl = worker, env, slot, now
       { waitUntil: promise => pending.push(Promise.resolve(promise)) }
     );
     await Promise.all(pending);
+    if (discovery && slot.task === "portals" && new Date(slot.scheduledTime).getUTCHours() === 0) {
+      const outcomes = await discovery(slot.slot);
+      logger.info?.(JSON.stringify({event:"recruitment_discovery_complete",outcomes}));
+    }
     await db.prepare(
       "UPDATE scheduler_runs SET state='ok',finished_at=?,error_code=NULL,details=? WHERE slot=? AND state='running'"
     ).bind(Date.now(), JSON.stringify({ task: slot.task }), slot.slot).run();
@@ -67,7 +72,7 @@ export async function runScheduledSlot({ db, workerImpl = worker, env, slot, now
   }
 }
 
-export function createScheduler({ db, workerImpl = worker, env, now = Date.now, logger = console, intervalMs = TICK_MS } = {}) {
+export function createScheduler({ db, workerImpl = worker, env, now = Date.now, logger = console, intervalMs = TICK_MS, discovery = null } = {}) {
   if (!db || !env || !Number.isSafeInteger(intervalMs) || intervalMs < 1000 || intervalMs > 60_000) {
     throw new Error("scheduler_configuration_invalid");
   }
@@ -80,7 +85,7 @@ export function createScheduler({ db, workerImpl = worker, env, now = Date.now, 
     activeTick = (async () => {
       const slot = scheduledSlot(now());
       if (!slot) return { state: "not_due" };
-      return runScheduledSlot({ db, workerImpl, env, slot, now: now(), logger });
+      return runScheduledSlot({ db, workerImpl, env, slot, now: now(), logger, discovery });
     })().finally(() => {
       activeTick = null;
     });
@@ -126,7 +131,7 @@ async function main() {
       ...(process.env.INGEST_HMAC_KEY ? { INGEST_HMAC_KEY: process.env.INGEST_HMAC_KEY } : {}),
       ...(process.env.SSB_AUTOMATED_ACCESS_APPROVED ? { SSB_AUTOMATED_ACCESS_APPROVED: process.env.SSB_AUTOMATED_ACCESS_APPROVED } : {})
     };
-    const scheduler = createScheduler({ db, env });
+    const scheduler = createScheduler({ db, env, discovery: slot => runRecruitmentDiscovery({pool,sources:POLICY_SOURCES,slot}) });
     await scheduler.start();
     console.info(JSON.stringify({ event: "scheduler_started", cron: GOVRADAR_SINGLE_CRON, tickMs: TICK_MS }));
 
