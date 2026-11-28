@@ -10,11 +10,15 @@ export function collectionSlot(time){
  const start=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),d.getUTCHours());
  return {day:d.toISOString().slice(0,10),slot:new Date(start).toISOString(),start};
 }
+const BUDGET_SOURCE="globalgov-zero-cost-budget";
 export async function reserveCollection(db,slot,now=Date.now()){
- if(!slot||!db||now<slot.start||now-slot.start>15*60000)return false;
- await db.prepare("INSERT INTO zero_cost_days(day) VALUES(?) ON CONFLICT(day) DO NOTHING").bind(slot.day).run();
- const r=await db.prepare("INSERT INTO zero_cost_runs(slot,day,started_at,state) SELECT ?,?,?,'reserved' FROM zero_cost_days WHERE day=? AND reserved_reads+?<=? AND reserved_writes+?<=? AND reserved_fetches+?<=? AND NOT EXISTS(SELECT 1 FROM zero_cost_runs WHERE slot=?)")
- .bind(slot.slot,slot.day,now,slot.day,BUDGET.perRunReads,BUDGET.reads,BUDGET.perRunWrites,BUDGET.writes,BUDGET.perRunFetches,BUDGET.fetches,slot.slot).run();
+ const expected=slot?collectionSlot(slot.start):null;
+ if(!expected||slot.slot!==expected.slot||slot.day!==expected.day||!db||now<slot.start||now-slot.start>15*60000)return false;
+ const start=Date.parse(slot.day+"T00:00:00Z"),end=start+24*HOUR,id=BUDGET_SOURCE+":"+slot.slot;
+ // A single SQLite write statement atomically claims the slot. The existing
+ // audit table avoids introducing another database or altering export schemas.
+ const r=await db.prepare("INSERT INTO source_ingest_runs(id,source_id,started_at,finished_at,state,http_status,received,accepted,discarded,error_code,details) SELECT ?,?,?,?,'error',NULL,0,0,0,'zero_cost_reserved',? WHERE (SELECT COUNT(*) FROM source_ingest_runs WHERE source_id=? AND started_at>=? AND started_at<?)<8 ON CONFLICT(id) DO NOTHING")
+ .bind(id,BUDGET_SOURCE,now,now,JSON.stringify({reservedReads:BUDGET.perRunReads,reservedWrites:BUDGET.perRunWrites,reservedFetches:BUDGET.perRunFetches}),BUDGET_SOURCE,start,end).run();
  return r?.meta?.changes===1;
 }
 function boundedDb(db,counters){
@@ -48,7 +52,7 @@ export async function runZeroCostCollection({db,scheduledTime,now=Date.now(),fet
   result=await ingest(boundedDb(db,counters),guarded,now,{origin:"scheduled"});
   if(result?.state!=="ok")throw Error(result?.errorCode||"collection_not_successful");
  }catch(e){result={state:"error",errorCode:String(e?.message||"collection_failed").replace(/[^a-zA-Z0-9_]/g,"_").slice(0,100)};}
- await db.prepare("UPDATE zero_cost_runs SET finished_at=?,state=?,read_rows=?,write_rows=?,fetches=?,error_code=? WHERE slot=? AND state='reserved'").bind(Date.now(),result.state==="ok"?"ok":"error",counters.reads,counters.writes,counters.fetches,result.errorCode||null,slot.slot).run();
+ await db.prepare("UPDATE source_ingest_runs SET finished_at=?,state=?,error_code=?,details=? WHERE id=? AND source_id=? AND error_code='zero_cost_reserved'").bind(Date.now(),result.state==="ok"?"ok":"error",result.errorCode||null,JSON.stringify({reservedReads:BUDGET.perRunReads,reservedWrites:BUDGET.perRunWrites,reservedFetches:BUDGET.perRunFetches,...counters}),BUDGET_SOURCE+":"+slot.slot,BUDGET_SOURCE).run();
  return {state:result.state,errorCode:result.errorCode||null,accepted:result.accepted||0,...counters};
 }
 export default{
