@@ -128,3 +128,31 @@ test('SSB snapshot gate is independent of ISRO and cannot broaden the UK-only en
   assert.equal((await get(db,'/api/notices?source='+source)).status,403);
  }finally{sqlite.close();}
 });
+
+test("portable NYC publication requires operator scope, documented policy and two successful native snapshots across endpoints",async()=>{
+ const {sqlite,db,now,future,past}=fixture();try{
+  const source="us-nyc-dcas-open-jobs",snapshot=now-2000;
+  sqlite.prepare("INSERT INTO official_job_notices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run("nyc-current",source,"Test NYC role","City agency","United States","New York City","Unclassified","https://data.cityofnewyork.us/resource/kpav-sd4t.json?job_id=123456&posting_type=External",past,future,now-60000,snapshot,"official_feed_unreviewed","US-NY-NYC","New York City","municipal","government_agency","open");
+  sqlite.exec("ALTER TABLE official_job_notices ADD COLUMN source_ref TEXT");
+  sqlite.prepare("UPDATE official_job_notices SET source_ref=? WHERE id=?").run("123456","nyc-current");
+  const add=sqlite.prepare("INSERT INTO source_ingest_runs VALUES (?,?,?,?,?,?,?,?,?,?)");
+  for(const [id,ts] of [["old",now-3*3600000],["new",snapshot]])add.run("nyc-"+id,source,ts,ts+20,"ok",1,1,0,null,'{"origin":"scheduled","snapshot":"complete"}');
+  sqlite.prepare("INSERT INTO notice_revisions VALUES (?,?,?,?,?,?,?)").run("nyc-current",source,now-100,"Old title","New title",past,future);
+  let denied=false;
+  const pool={query:async(sql,values)=>({rows:[{automated_access_status:denied&&values[0]===source?"denied":"approved",reuse_status:"conditional",reviewer_label:"repository-policy-seed",reviewed_at:null,expires_at:null}]})};
+  const request=(path,enabled)=>worker.fetch(new Request("https://preview.example"+path),{DB:db,SOURCE_POLICY_POOL:pool,REQUIRE_SOURCE_POLICY_REGISTRY:"true",GLOBALGOV_NYC_PUBLICATION:enabled?"true":"false"});
+  assert.equal((await request("/api/notices?source="+source+"&scope=research",false)).status,403);
+  const published=await(await request("/api/notices?source="+source,true)).json();
+  assert.deepEqual(published.notices.map(x=>x.id),["nyc-current"]);
+  assert.equal(published.notices[0].sourceReference,"123456");
+  assert.equal((await request("/api/release-preview/notices?source="+source,true)).status,403);
+  assert.ok((await(await request("/api/ingestion-status",true)).json()).bySource.some(x=>x.sourceId===source&&x.count===1));
+  assert.deepEqual((await(await request("/api/notice-changes?country=United%20States",true)).json()).changes.map(x=>x.noticeId),["nyc-current"]);
+  denied=true;
+  assert.equal((await request("/api/notices?source="+source,true)).status,403);
+  assert.deepEqual((await(await request("/api/notice-changes?country=United%20States",true)).json()).changes,[]);
+  denied=false;
+  add.run("nyc-failed",source,now-100,now-100,"error",0,0,0,"blocked",'{"origin":"scheduled","snapshot":"failed"}');
+  assert.equal((await request("/api/notices?source="+source,true)).status,403);
+ }finally{sqlite.close();}
+});
