@@ -280,9 +280,10 @@ jobs:
           printf 'GLOBALGOV_BACKUP_KEY_HEX=%s\nBACKUP_REQUIRE_REMOTE=false\nBACKUP_REMOTE_TARGET=\nBACKUP_RETENTION_DAYS=14\n' "$key" > .env.backup
           mkdir -p "$RUNNER_TEMP/globalgov-fixture" secrets/ssh
           cp infra/self-hosted/fixtures/d1-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/export.sql"
+          cp infra/self-hosted/fixtures/d1-uk-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/uk.sql"
           sudo chown -R 1000:1000 "$RUNNER_TEMP/globalgov-fixture"
           sudo chmod 700 "$RUNNER_TEMP/globalgov-fixture"
-          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/export.sql"
+          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/"*.sql
       - name: Build and initialize an empty isolated PostgreSQL deployment
         run: |
           docker compose config --quiet
@@ -305,6 +306,18 @@ jobs:
             echo "Non-empty target was not rejected" >&2
             exit 1
           fi
+      - name: Reconcile isolated UK snapshot without exposing archive to app
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .env.backup
+          fixture="$RUNNER_TEMP/globalgov-fixture:/migration"
+          docker compose --profile tools run --rm --no-deps -v "$fixture" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node d1-export-backup.mjs encrypt-uk /migration/uk.sql /migration/uk.enc
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node postgres-import.mjs plan-uk /migration/uk.enc > "$RUNNER_TEMP/uk-plan.json"
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply-uk /migration/uk.enc > "$RUNNER_TEMP/uk-apply.json"
+          jq -e '.state == "verified" and .tableCount == 4 and .totalRows == 4' "$RUNNER_TEMP/uk-apply.json"
+          jq -e -s '.[0].counts == .[1].counts and .[0].checksums == .[1].checksums' "$RUNNER_TEMP/uk-plan.json" "$RUNNER_TEMP/uk-apply.json"
+          docker compose exec -T postgres psql -U globalgov_admin -d globalgov_ci_rehearsal -v ON_ERROR_STOP=1 -Atc "SELECT NOT has_schema_privilege('globalgov_app','uk_archive','USAGE') AND has_schema_privilege('globalgov_backup','uk_archive','USAGE') AND (SELECT COUNT(*) FROM public.official_job_notices)=1 AND (SELECT COUNT(*) FROM uk_archive.official_job_notices)=1" | grep -qx t
       - name: Verify application using the restored database
         run: |
           docker compose up -d --wait app
@@ -318,6 +331,7 @@ jobs:
           docker compose run --rm --no-deps restore-scheduler postgres-restore-test.mjs > "$RUNNER_TEMP/restore.json"
           jq -e '.state == "verified" and .temporaryDatabaseDropped == true and .documentArchiveVerified == true' "$RUNNER_TEMP/restore.json"
           jq -e -s '.[0].counts as $expected | .[1].counts as $actual | all($expected | to_entries[]; $actual[.key] == .value)' "$RUNNER_TEMP/apply.json" "$RUNNER_TEMP/restore.json"
+          jq -e -s '.[0].counts == .[1].ukArchiveCounts' "$RUNNER_TEMP/uk-apply.json" "$RUNNER_TEMP/restore.json"
       - name: Destroy only disposable CI resources
         if: always()
         run: docker compose down --volumes --remove-orphans
