@@ -119,6 +119,14 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
   await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
     " IN SCHEMA public GRANT SELECT ON SEQUENCES TO " + quote(backupUser));
   await pool.query("REVOKE pg_read_all_data FROM " + quote(backupUser));
+  const archive = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname='uk_archive'");
+  if (archive.rows.length) {
+    await pool.query("REVOKE ALL ON SCHEMA uk_archive FROM " + quote(appUser));
+    await pool.query("GRANT USAGE ON SCHEMA uk_archive TO " + quote(backupUser));
+    await pool.query("GRANT SELECT ON ALL TABLES IN SCHEMA uk_archive TO " + quote(backupUser));
+    await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
+      " IN SCHEMA uk_archive GRANT SELECT ON TABLES TO " + quote(backupUser));
+  }
   await pool.query("GRANT SELECT,INSERT,UPDATE ON TABLE backup_runs TO " + quote(backupUser));
   await pool.query("GRANT CONNECT ON DATABASE " + quote("postgres") + " TO " + quote(restoreUser));
   return { status: "applied", appRole: appUser, backupRole: backupUser, restoreTestRole: restoreUser };
