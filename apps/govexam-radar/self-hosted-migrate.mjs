@@ -111,7 +111,14 @@ export async function applyRuntimeRoleGrants(pool, env = process.env) {
     " IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO " + quote(appUser));
   await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
     " IN SCHEMA public GRANT USAGE,SELECT,UPDATE ON SEQUENCES TO " + quote(appUser));
-  await pool.query("GRANT pg_read_all_data TO " + quote(backupUser));
+  // Limit the backup reader to this database's application schema.
+  await pool.query("GRANT SELECT ON ALL TABLES IN SCHEMA public TO " + quote(backupUser));
+  await pool.query("GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO " + quote(backupUser));
+  await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
+    " IN SCHEMA public GRANT SELECT ON TABLES TO " + quote(backupUser));
+  await pool.query("ALTER DEFAULT PRIVILEGES FOR ROLE " + quote(adminUser) +
+    " IN SCHEMA public GRANT SELECT ON SEQUENCES TO " + quote(backupUser));
+  await pool.query("REVOKE pg_read_all_data FROM " + quote(backupUser));
   await pool.query("GRANT SELECT,INSERT,UPDATE ON TABLE backup_runs TO " + quote(backupUser));
   await pool.query("GRANT CONNECT ON DATABASE " + quote("postgres") + " TO " + quote(restoreUser));
   return { status: "applied", appRole: appUser, backupRole: backupUser, restoreTestRole: restoreUser };
