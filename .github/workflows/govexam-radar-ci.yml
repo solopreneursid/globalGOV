@@ -268,6 +268,8 @@ jobs:
       COMPOSE_PROJECT_NAME: globalgov-ci-rehearsal
     steps:
       - uses: actions/checkout@v4
+      - name: Check remote bootstrap shell syntax
+        run: bash -n infra/self-hosted/bootstrap.sh
       - name: Prepare disposable configuration and private fixture
         shell: bash
         run: |
@@ -335,3 +337,19 @@ jobs:
       - name: Destroy only disposable CI resources
         if: always()
         run: docker compose down --volumes --remove-orphans
+
+  nyc-public-source-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify NYC probe with synthetic fixtures
+        run: node --test apps/govexam-radar/probe-nyc-open-data.test.mjs
+      - name: Check official public API anonymously (research only)
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-nyc-open-data.mjs
