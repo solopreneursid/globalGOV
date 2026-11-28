@@ -1,5 +1,5 @@
-// Portable static-first compiler. Only explicit UK DfE source rights are enabled
-// initially. No private database rows, arbitrary HTML, external scripts or ads.
+// Portable static-first compiler. Explicit UK DfE and ISRO publication scope.
+// No private database rows, arbitrary HTML, external scripts or ads.
 import {createHash} from "node:crypto";
 const SOURCE="uk-dfe-teaching-vacancies",ISRO="india-isro-opportunities",DAY=86400000,HOUR=3600000;
 const COUNTRY=Object.freeze({[SOURCE]:"United Kingdom",[ISRO]:"India"});
@@ -30,7 +30,9 @@ export function compileCatalogue({rows,generatedAt,sourceHealthy,origin=null,ind
   const title=clean(r.title,220),employer=clean(r.employer,220),region=clean(r.region,120)||(r.source_id===SOURCE?"England":"India"),url=officialUrl(r.source_page,r.source_id);
   const close=timestamp(r.closing_at),seen=Number(r.last_seen_at);
   if(!title||!employer||!url||!Number.isSafeInteger(seen)||seen>now+60000||seen<now-14*DAY||!Number.isFinite(close)||close<=now)throw Error("invalid_or_stale_public_row");
-  const id=hash(r.source_id+"|"+url.replace(/\/$/,"")).slice(0,32);
+  const identity=r.source_id===ISRO?clean(r.source_ref,300):url.replace(/\/$/,"");
+  if(!identity)throw Error("source_reference_required");
+  const id=hash(r.source_id+"|"+identity).slice(0,32);
   if(ids.has(id))throw Error("duplicate_public_row");ids.add(id);
   jobs.push({id,title,employer,region:COUNTRY[r.source_id]+" · "+region,source:r.source_id,url,closingAt:r.closing_at,seen,until:Math.min(close,validUntil)});
  }
