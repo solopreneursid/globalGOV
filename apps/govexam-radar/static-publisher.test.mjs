@@ -131,3 +131,19 @@ test("ISRO requires complete native snapshots and latest membership independentl
   assert.equal(db.prepare(SNAPSHOT_SQL).all(...args).length,1);
  }finally{db.close();}
 });
+
+test("production SEO assets are scoped to explicit HTTPS canonical origin, previews are never indexed",()=>{
+ const preview=compileCatalogue(snapshot);
+ assert.equal(preview.files.get("robots.txt"),"User-agent: *\nDisallow: /\n");
+ assert.match(preview.files.get("404.html"),/noindex,nofollow/);
+ assert.doesNotMatch(preview.files.get("sitemap.xml"),/<loc>/);
+ const production=compileCatalogue({...snapshot,origin:"https://jobs.example.test",indexable:true});
+ const jobPath=[...production.files.keys()].find(p=>p.startsWith("job/"));
+ const canonical="https://jobs.example.test/"+jobPath.replace(/index\.html$/,"");
+ assert.ok(production.files.get(jobPath).includes('rel="canonical" href="'+canonical+'"'));
+ assert.ok(production.files.get("sitemap.xml").includes("<loc>"+canonical+"</loc>"));
+ assert.match(production.files.get("404.html"),/noindex,nofollow/);
+ assert.doesNotMatch(production.files.get(jobPath),/JobPosting/);
+ for(const origin of ["http://jobs.example.test","https://jobs.example.test/subpath","https://user@jobs.example.test","https://jobs.example.test:8443"])
+  assert.throws(()=>compileCatalogue({...snapshot,origin,indexable:true}),/invalid_origin/);
+});
