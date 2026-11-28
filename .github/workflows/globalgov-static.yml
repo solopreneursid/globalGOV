@@ -41,6 +41,23 @@ jobs:
           name: globalgov-static-synthetic-preview
           path: ${{ runner.temp }}/globalgov-static/public
           retention-days: 2
+  browser:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install matching browser driver
+        working-directory: apps/govexam-radar
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.56.1
+      - name: Verify actual mobile browser and stale-state handling
+        run: node --test apps/govexam-radar/static-browser.test.mjs
   refresh-preview:
     # Deliberately inactive until owner verifies shared-account billing/quotas
     # and configures dedicated protected credentials and the existing Pages project.
