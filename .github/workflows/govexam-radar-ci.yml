@@ -353,3 +353,6 @@ jobs:
       - name: Check official public API anonymously (research only)
         continue-on-error: true
         run: node apps/govexam-radar/probe-nyc-open-data.mjs
+      - name: Verify complete bounded NYC snapshot and current-date normalization (research only)
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-nyc-open-data.mjs --full
