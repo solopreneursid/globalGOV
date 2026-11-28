@@ -283,7 +283,7 @@ jobs:
           cp infra/self-hosted/fixtures/d1-uk-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/uk.sql"
           sudo chown -R 1000:1000 "$RUNNER_TEMP/globalgov-fixture"
           sudo chmod 700 "$RUNNER_TEMP/globalgov-fixture"
-          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/"*.sql
+          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/export.sql" "$RUNNER_TEMP/globalgov-fixture/uk.sql"
       - name: Build and initialize an empty isolated PostgreSQL deployment
         run: |
           docker compose config --quiet
