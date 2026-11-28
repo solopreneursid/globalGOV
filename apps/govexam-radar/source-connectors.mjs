@@ -3,6 +3,7 @@
 import { sourceRights } from "./source-rights.mjs";
 
 const HOST_POLICIES = Object.freeze({
+  "data.cityofnewyork.us": Object.freeze({connector:"official_json_feed",automationStatus:"approved_public_feed",automatedCollectionEnabled:true,reuseStatus:"conditional_open_data",allowedPaths:Object.freeze(["/resource/kpav-sd4t.json"]),allowedContentTypes:Object.freeze(["application/json"])}),
   "teaching-vacancies.service.gov.uk": Object.freeze({
     connector: "official_json_feed",
     automationStatus: "approved_public_feed",
