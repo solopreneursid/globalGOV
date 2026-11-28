@@ -8,7 +8,7 @@ const token=process.env.CLOUDFLARE_API_TOKEN;
 const name=process.env.GOVRADAR_WORKER_NAME||STAGING_WORKER;
 const EXPECTED_ACCOUNT="69234e51e08d8013980a7ff869746609";
 const MODULES=["worker.js","full-ui.mjs","full-css.mjs","enhance.mjs","community-api.mjs",
- "source-monitor.mjs","source-connectors.mjs","source-policy.mjs","official-feed.mjs","source-rights.mjs","official-ui.mjs","release-preview-ui.mjs","regional-sources.mjs",
+ "source-monitor.mjs","source-connectors.mjs","source-policy.mjs","official-feed.mjs","nyc-feed.mjs","source-rights.mjs","official-ui.mjs","release-preview-ui.mjs","regional-sources.mjs",
  "regional-ui.mjs","manitoba-feed.mjs","india-employment-news.mjs",
  "collector-bridge.mjs","notice-lifecycle.mjs","moderation-api.mjs",
  "moderation-ui.mjs","portable-bookmarks.mjs","lite-ui.mjs","isro-feed.mjs","ssb-feed.mjs","reviewed-catalog.mjs","reviewed-ui.mjs","usajobs-history.mjs","usajobs-history-ui.mjs"];
