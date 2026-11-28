@@ -4,6 +4,17 @@
 // not a legal opinion or a substitute for written permission where required.
 const RIGHT_ENTRIES=[
  {
+  id:"us-nyc-dcas-open-jobs",
+  reuseStatus:"conditional_open_data",
+  commercialReuseApprovedForCurrentFields:true,
+  licence:"NYC Open Data public-use policy; factual metadata only, subject to source terms",
+  licenceUrl:"https://www.nyc.gov/opendata/get-started/FAQs",
+  termsUrl:"https://data.cityofnewyork.us/stories/s/Terms-of-Use/k9k7-3cje",
+  officialSourceUrl:"https://data.cityofnewyork.us/City-Government/Jobs-NYC-Postings/kpav-sd4t",
+  attribution:"Source: NYC Open Data / Department of Citywide Administrative Services. Filtered factual job metadata; not endorsed by the City. Check the original record and cityjobs.nyc.gov using the job ID.",
+  note:"Current official open-data policy permits use without registration. Scope excludes descriptions and applicant data. Older Data Mine terms mention notification; confirm applicability before enabling NYC public deployment. No claim of direct application URL or exact closing hour. Date-only cutoffs are conservative local visibility boundaries."
+ },
+ {
   id:"uk-dfe-teaching-vacancies",
   reuseStatus:"conditional_open_licence",
   commercialReuseApprovedForCurrentFields:true,
