@@ -33,7 +33,8 @@ rehearse() {
   docker compose version >/dev/null || die "Docker Compose plugin required"
   private_file .env; private_file .env.backup
   [[ "$(id -u)" == 1000 ]] || die "Use the dedicated remote UID 1000 account; no ownership changes to originals"
-  local primary uk db work key
+  local primary uk db work key state
+  private_file "$1"; private_file "$2"
   primary="$(realpath -- "$1")"; uk="$(realpath -- "$2")"
   private_file "$primary"; private_file "$uk"
   [[ "$primary" != "$uk" ]] || die "Two distinct snapshots required"
@@ -43,7 +44,12 @@ rehearse() {
   [[ "$key" =~ ^[0-9a-fA-F]{64}$ ]] || die "Invalid backup key"
   export GLOBALGOV_BACKUP_KEY_HEX="$key"; unset key
   # A new isolated project for each rehearsal; never stop existing workloads.
-  work="$(mktemp -d "$PWD/.rehearsal.XXXXXXXX")"
+  state="$HOME/.local/state/globalgov"
+  mkdir -p -m 700 "$state"
+  [[ ! -L "$state" && "$(stat -c '%a' "$state")" == 700 ]] || die "Private state directory required"
+  state="$(realpath -- "$state")"
+  [[ "$state/" != "$PWD/"* ]] || die "Rehearsal data must be outside the repository/build context"
+  work="$(mktemp -d "$state/rehearsal.XXXXXXXX")"
   export COMPOSE_PROJECT_NAME="globalgov-rehearsal-$(basename "$work" | tr -cd 'a-zA-Z0-9' | tr '[:upper:]' '[:lower:]')"
   install -m 600 "$primary" "$work/primary.sql"
   install -m 600 "$uk" "$work/uk.sql"
