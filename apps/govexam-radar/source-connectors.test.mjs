@@ -144,7 +144,7 @@ test("robots wildcard, anchors, encodings, precedence and crawl delays preserve 
  assert.equal(parseRobotsRules(rules,"globalGOV","/protected").allowed,false);
  assert.equal(parseRobotsRules(rules,"globalGOV","/job/secret").allowed,true);
  assert.equal(parseRobotsRules(rules,"globalGOV","/resource/jobs.json").delayMs,12000);
- const grouped="User-agent: globalGOV\nDisallow: /secret\nUser-agent: otherxxxx\nUser-agent: *\nDisallow: /";
+ const grouped="User-agent: globalGOV\nDisallow: /secret\nUser-agent: unrelatedverylongcrawlername\nUser-agent: *\nDisallow: /";
  assert.equal(parseRobotsRules(grouped,"globalGOV","/secret").allowed,false);
  assert.equal(parseRobotsRules(grouped,"globalGOV","/public").allowed,true);
 });
