@@ -8,7 +8,17 @@ test('event headings are classified and tied to an exact reference, never a publ
  assert.ok(result.candidates.every(x=>x.sourceUrl===EVENT_INDEX&&x.state==='candidate_only'&&x.advertisement===ref&&!('heading' in x)));
  assert.equal(result.publicLaunchAuthorized,false);
 });
-test('event index is never fetched when robots is restricted',async()=>{
- let calls=0;await assert.rejects(probeEvents(async()=>{calls++;return new Response('',{status:403});}),/robots_access_unconfirmed/);assert.equal(calls,1);
+test('event index is never fetched without reviewed source policy',async()=>{
+ let calls=0;
+ await assert.rejects(probeEvents(async()=>{calls++;return new Response('',{status:403});}),/reviewed_source_policy_required/);
+ assert.equal(calls,0);
+});
+test('event index fetch respects robots denial under a reviewed source policy',async()=>{
+ let calls=0;
+ const policy={sourceId:'india-sdsc-shar',host:'apps.shar.gov.in',automationStatus:'approved',
+  automatedCollectionEnabled:true,allowedPaths:['/sdscshar/result1.jsp'],allowedContentTypes:['text/html'],
+  maxBytes:512*1024,minIntervalMs:5000};
+ await assert.rejects(probeEvents(async()=>{calls++;return new Response('',{status:403});},policy),/robots_access_unconfirmed_403/);
+ assert.equal(calls,1);
  assert.throws(()=>parseEventIndex('<html>Login</html>'),/unsupported_event_index_schema/);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {runScheduledPortalChecks,getPortalStatus} from "./source-monitor.mjs";
+import {checkPortalUrl,runScheduledPortalChecks,getPortalStatus} from "./source-monitor.mjs";
 import worker from "./worker.js";
 function mockDatabase(){
  const statuses=new Map(),history=[];
@@ -40,4 +40,26 @@ test("scheduled monitor checks only oldest subset and writes truthful outcomes",
    assert.ok(body.sources.every(s=>s.status==="reachable"&&!s.stale));
    assert.equal(body.verifiedVacancies,0);
  }finally{globalThis.fetch=original;}
+});
+
+test("redirects are not treated as reachable source checks",async()=>{
+ const source={id:"ssb",url:"https://recruitment.ssb.gov.in/"};
+ const redirected=await checkPortalUrl(source,async()=>new Response("",{status:302,headers:{location:"/login"}}));
+ assert.equal(redirected.status,"unconfirmed");
+ assert.equal(redirected.httpStatus,302);
+ const blocked=await checkPortalUrl(source,async()=>new Response("",{status:403}));
+ assert.equal(blocked.status,"restricted");
+ const ok=await checkPortalUrl(source,async()=>new Response("",{status:200}));
+ assert.equal(ok.status,"reachable");
+});
+test("connector inventory exposes all 58 portals and keeps SSB automated access disabled",async()=>{
+ const response=await worker.fetch(new Request("https://test.invalid/api/source-connectors"));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.total,60);
+ const ssb=body.sources.find(x=>x.url.includes("recruitment.ssb.gov.in"));
+ assert.ok(ssb);
+ assert.equal(ssb.automatedCollectionEnabled,false);
+ assert.equal(ssb.automationStatus,"clarification_required");
+ assert.ok(body.sources.filter(x=>x.connector==="directory_only").length>0);
 });

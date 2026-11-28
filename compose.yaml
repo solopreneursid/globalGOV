@@ -1,0 +1,260 @@
+name: globalgov
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-globalgov}
+      POSTGRES_USER: ${POSTGRES_USER:-globalgov_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_DB_USER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      BACKUP_DB_USER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
+      BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
+      RESTORE_TEST_DB_USER: ${RESTORE_TEST_DB_USER:?Set RESTORE_TEST_DB_USER in .env}
+      RESTORE_TEST_DB_PASSWORD: ${RESTORE_TEST_DB_PASSWORD:?Set RESTORE_TEST_DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/self-hosted/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-globalgov_admin} -d ${POSTGRES_DB:-globalgov}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [data]
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      PGSSLMODE: disable
+      INGEST_HMAC_KEY: ${INGEST_HMAC_KEY:-}
+      MODERATOR_TOKEN: ${MODERATOR_TOKEN:-}
+      SSB_AUTOMATED_ACCESS_APPROVED: ${SSB_AUTOMATED_ACCESS_APPROVED:-false}
+      REQUIRE_SOURCE_POLICY_REGISTRY: "true"
+      GLOBALGOV_NYC_PUBLICATION: ${GLOBALGOV_NYC_PUBLICATION:-false}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-4194304}
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
+    expose: ["8080"]
+    volumes:
+      - globalgov_documents:/var/lib/globalgov/documents
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/internal/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [backend, data]
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "self-hosted-scheduler.mjs"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      PGSSLMODE: disable
+      INGEST_HMAC_KEY: ${INGEST_HMAC_KEY:-}
+      SSB_AUTOMATED_ACCESS_APPROVED: ${SSB_AUTOMATED_ACCESS_APPROVED:-false}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
+    volumes:
+      - globalgov_documents:/var/lib/globalgov/documents
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [backend, data]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "self-hosted-migrate.mjs"]
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable
+    networks: [data]
+
+  policy-review:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "source-policy-admin.mjs"]
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${POSTGRES_USER:-globalgov_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable
+    networks: [data]
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "self-hosted-monitor.mjs"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${APP_DB_USER:?Set APP_DB_USER in .env}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      PGSSLMODE: disable
+      APP_HEALTH_URL: http://app:8080/api/health
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
+      BACKUP_DIR: /var/lib/globalgov/backups
+    volumes:
+      - globalgov_documents:/var/lib/globalgov/documents:ro
+      - globalgov_backups:/var/lib/globalgov/backups:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [backend, data]
+
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env.backup
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
+      PGPASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
+      PGSSLMODE: disable
+      BACKUP_DIR: /var/lib/globalgov/backups
+      DOCUMENT_STORE_DIR: /var/lib/globalgov/documents
+    volumes:
+      - globalgov_backups:/var/lib/globalgov/backups
+      - globalgov_documents:/var/lib/globalgov/documents:ro
+      - ./secrets/ssh:/home/globalgov/.ssh:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [data, edge]
+
+  restore-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    command: ["restore-scheduler.mjs"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env.backup
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-globalgov}
+      PGUSER: ${BACKUP_DB_USER:?Set BACKUP_DB_USER in .env}
+      PGPASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD in .env}
+      PGSSLMODE: disable
+      RESTORE_TEST_DB_USER: ${RESTORE_TEST_DB_USER:?Set RESTORE_TEST_DB_USER in .env}
+      RESTORE_TEST_DB_PASSWORD: ${RESTORE_TEST_DB_PASSWORD:?Set RESTORE_TEST_DB_PASSWORD in .env}
+      BACKUP_DIR: /var/lib/globalgov/backups
+    volumes:
+      - globalgov_backups:/var/lib/globalgov/backups
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [data]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [backend, edge]
+
+networks:
+  backend:
+  data:
+    internal: true
+  edge:
+
+volumes:
+  postgres_data:
+  globalgov_documents:
+  globalgov_backups:
+  caddy_data:
+  caddy_config:

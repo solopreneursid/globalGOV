@@ -1,5 +1,5 @@
 // Evidence-based notice lifecycle. A missing notice on a partial page is NOT a withdrawal.
-import {allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
+import {NYC_SOURCE,allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
 import {ISRO_SOURCE,isroPublicationGate} from "./isro-feed.mjs";
 import {SSB_SOURCE,ssbPublicationGate} from "./ssb-feed.mjs";
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
@@ -12,7 +12,7 @@ export async function expireKnownDeadlines(db,now=Date.now()){
   return {expired:updated.meta?.changes||0,prunedRevisions:pruned.meta?.changes||0};
  }catch(e){console.error(JSON.stringify({event:"notice_expiry_failed",error:String(e?.message||e)}));return{error:"database_error",expired:0};}
 }
-export async function serveNoticeChanges(db,params,scope="research"){
+export async function serveNoticeChanges(db,params,scope="research",publication=null){
  if(!db)return reply({error:"not_configured",changes:[]},503);
  try{
   if(!["research","uk_only_release_preview","approved_staging"].includes(scope))return reply({error:"unknown_release_profile",changes:[]},503);
@@ -22,13 +22,16 @@ export async function serveNoticeChanges(db,params,scope="research"){
   const country=(params.get("country")||"").slice(0,50);
   const where=["r.observed_at>=?"];const args=[since];
   if(scope==="uk_only_release_preview"||scope==="approved_staging"){
-   const allowed=allowedCommercialPreviewSources();
+   let allowed=allowedCommercialPreviewSources();
    const gate=scope==="approved_staging"?await isroPublicationGate(db):{ready:false};
    const ssbGate=scope==='approved_staging'?await ssbPublicationGate(db):{ready:false};
    if(gate.ready)allowed.push(allowedIsroPreviewSource());if(ssbGate.ready)allowed.push(allowedSsbPreviewSource());
-   where.push("r.source_id IN ("+allowed.map(()=>"?").join(",")+")","r.source_id=j.source_id");
+   const nycGate=scope==="approved_staging"?publication?.nycGate||{ready:false}:{ready:false};
+   if(nycGate.ready)allowed.push(NYC_SOURCE.id);
+   if(publication)allowed=allowed.filter(id=>publication.allowedIds.includes(id));
+   where.push("r.source_id IN ("+(allowed.map(()=>"?").join(",")||"NULL")+")","r.source_id=j.source_id");
    args.push(...allowed);
-   for(const [source,g] of [[ISRO_SOURCE,gate],[SSB_SOURCE,ssbGate]])if(g.ready){where.push("(r.source_id!=? OR (j.last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))");args.push(source.id,g.snapshotAt,source.id,g.snapshotAt,g.snapshotAt);}
+   for(const [source,g] of [[ISRO_SOURCE,gate],[SSB_SOURCE,ssbGate],[NYC_SOURCE,nycGate]])if(g.ready&&allowed.includes(source.id)){where.push("(r.source_id!=? OR (j.last_seen_at=? AND NOT EXISTS (SELECT 1 FROM source_ingest_runs g WHERE g.source_id=? AND g.started_at>=? AND (g.started_at>? OR g.state!='ok'))))");args.push(source.id,g.snapshotAt,source.id,g.snapshotAt,g.snapshotAt);}
   }
   if(country){where.push("j.country=?");args.push(country);}
   const result=await db.prepare("SELECT r.notice_id as noticeId,r.source_id as sourceId,r.observed_at as observedAt,r.old_title as previousTitle,r.new_title as title,r.old_closing_at as previousClosingAt,r.new_closing_at as closingAt,j.country,j.jurisdiction_name as jurisdiction,j.source_page as sourceUrl FROM notice_revisions r JOIN official_job_notices j ON j.id=r.notice_id WHERE "+where.join(" AND ")+" ORDER BY r.observed_at DESC LIMIT ?").bind(...args,limit).all();

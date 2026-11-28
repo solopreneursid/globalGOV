@@ -19,3 +19,21 @@ test('D1 SQL export recovery preserves exact encrypted SQL and required tables',
   await assert.rejects(verifySqlExport(Buffer.concat([sql,Buffer.from('\n.shell echo forbidden')])),/isolated_sql_import_failed/);
  }finally{key.fill(0);await rm(dir,{recursive:true,force:true});}
 });
+
+test('UK-only export requires explicit profile and preserves distinct audit tables',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'globalgov-uk-backup-test-')),input=join(dir,'uk.sql'),output=join(dir,'uk.enc'),key=randomBytes(32);
+ const ukTables=['official_job_notices','uk_mirror_runs','uk_mirror_state','uk_withdrawal_checks'];
+ const ukSql=Buffer.from(ukTables.map(t=>'CREATE TABLE '+t+'(id INTEGER PRIMARY KEY, value TEXT);').join('\n')+"\nINSERT INTO official_job_notices VALUES(1,'synthetic UK only');");
+ try{
+  await writeFile(input,ukSql,{mode:0o600});
+  await assert.rejects(encryptD1Export(input,output,key),/incomplete_globalgov_export/);
+  const a=await encryptD1Export(input,output,key,'uk'),b=await verifyD1Backup(output,key,'uk');
+  assert.equal(a.requiredTables,4);assert.equal(a.counts.official_job_notices,1);
+  assert.equal(a.encryptedSha256,b.encryptedSha256);
+  assert.deepEqual(openD1Export(await readFile(output),key),ukSql);
+  await assert.rejects(verifyD1Backup(output,key),/incomplete_globalgov_export/);
+  await assert.rejects(verifySqlExport(sql,'uk'),/incomplete_globalgov_export/);
+  await assert.rejects(verifySqlExport(Buffer.concat([ukSql,Buffer.from('\nCREATE TABLE unexpected(id INT);')]),'uk'),/incomplete_globalgov_export/);
+  await assert.rejects(verifySqlExport(ukSql,'invalid'),/invalid_d1_backup_profile/);
+ }finally{key.fill(0);await rm(dir,{recursive:true,force:true});}
+});

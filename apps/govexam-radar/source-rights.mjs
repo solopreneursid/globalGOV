@@ -2,7 +2,19 @@
 // A government's general open-data policy never overrides a narrower
 // service-specific notice. This is a conservative implementation checklist,
 // not a legal opinion or a substitute for written permission where required.
+export const NYC_SOURCE=Object.freeze({id:"us-nyc-dcas-open-jobs",name:"New York City — DCAS",country:"United States",url:"https://data.cityofnewyork.us/resource/kpav-sd4t.json",portal:"https://cityjobs.nyc.gov/"});
 const RIGHT_ENTRIES=[
+ {
+  id:"us-nyc-dcas-open-jobs",
+  reuseStatus:"conditional_open_data",
+  commercialReuseApprovedForCurrentFields:true,
+  licence:"NYC Open Data public-use policy; factual metadata only, subject to source terms",
+  licenceUrl:"https://www.nyc.gov/opendata/get-started/FAQs",
+  termsUrl:"https://data.cityofnewyork.us/stories/s/Terms-of-Use/k9k7-3cje",
+  officialSourceUrl:"https://data.cityofnewyork.us/City-Government/Jobs-NYC-Postings/kpav-sd4t",
+  attribution:"Source: NYC Open Data / Department of Citywide Administrative Services. Filtered factual job metadata; not endorsed by the City. Check the original record and cityjobs.nyc.gov using the job ID.",
+  note:"Current official open-data policy permits use without registration. Scope excludes descriptions and applicant data. Older Data Mine terms mention notification; confirm applicability before enabling NYC public deployment. No claim of direct application URL or exact closing hour. Date-only cutoffs are conservative local visibility boundaries."
+ },
  {
   id:"uk-dfe-teaching-vacancies",
   reuseStatus:"conditional_open_licence",
@@ -34,7 +46,8 @@ const RIGHT_ENTRIES=[
   termsUrl:"https://recruitment.ssb.gov.in/websitepolicyUrl",
   officialSourceUrl:"https://recruitment.ssb.gov.in/adv_newsUrl",
   attribution:"Source: Sashastra Seema Bal, Ministry of Home Affairs, Government of India.",
-  note:"Official advertisement metadata only. Third-party material excluded. Use the official advertisement table; no invented direct apply link. Date-only deadlines are visibility boundaries."
+  automatedAccessStatus:"clarification_required",
+  note:"Accurate attributed reproduction is distinct from permission to automate collection. The robots.txt endpoint returned HTTP 302 to a login route; unattended collection is disabled pending clarification. Official advertisement metadata only; third-party material excluded. Use the official advertisement table; no invented direct apply link. Date-only deadlines are visibility boundaries."
  },
  {
   id:"manitoba-jobs",

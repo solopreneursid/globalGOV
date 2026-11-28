@@ -14,6 +14,10 @@ See [the self-hosted architecture and migration plan](docs/architecture/SELF_HOS
 
 ## Local verification
 
-Use Node.js 22. Run `cd apps/govexam-radar && npm test`. For browser tests install Playwright 1.56.1 and Chromium, then run `node --test browser.test.mjs uk-release-browser.test.mjs`.
+Use Node.js 26 LTS. Run `cd apps/govexam-radar && npm test`. For browser tests install Playwright 1.56.1 and Chromium, then run `node --test browser.test.mjs uk-release-browser.test.mjs`.
 
 No production deployment or data publishing is authorized by this migration.
+## Self-hosted runtime
+
+The owner-operated Node.js/PostgreSQL runtime is being built under [infra/self-hosted](infra/self-hosted/README.md). It is not ready for production use until the PostgreSQL migration, data reconciliation, source-ingestion, backup/restore and security gates pass. The existing Cloudflare staging deployment remains unchanged.
+

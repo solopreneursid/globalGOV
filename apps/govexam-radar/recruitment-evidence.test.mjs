@@ -18,9 +18,17 @@ test('source allowlist blocks spoofed host, arbitrary path, query and non-HTTPS'
  for(const u of ['https://apps.shar.gov.in.evil.test/sdscshar/notice/test.pdf','https://apps.shar.gov.in/login.pdf','http://apps.shar.gov.in/sdscshar/notice/test.pdf',sourceUrl+'?a=1','https://apps.shar.gov.in/sdscshar/notice/a%2Fb.pdf'])assert.throws(()=>officialDocumentUrl(sourceId,u));
  assert.equal(officialDocumentUrl(sourceId,sourceUrl),sourceUrl);
 });
-test('fetch stops at login redirect and restrictive robots; no upstream PDF fetch',async()=>{
- let calls=0;await assert.rejects(fetchOfficialDocument(sourceId,sourceUrl,async()=>{calls++;return new Response('',{status:302,headers:{location:'https://apps.shar.gov.in/login'}});}),/robots_access_unconfirmed/);assert.equal(calls,1);
- calls=0;await assert.rejects(fetchOfficialDocument(sourceId,sourceUrl,async()=>{calls++;return new Response('User-agent: *\nDisallow: /',{headers:{'content-type':'text/plain'}});}),/robots_review_required/);assert.equal(calls,1);
+test('direct PDF fetch requires reviewed policy before any network request',async()=>{
+ let calls=0;
+ await assert.rejects(fetchOfficialDocument(sourceId,sourceUrl,async()=>{calls++;return new Response('',{status:302});}),/reviewed_source_policy_required/);
+ assert.equal(calls,0);
+ const policy={sourceId,host:'apps.shar.gov.in',automationStatus:'approved',automatedCollectionEnabled:true,
+  allowedPaths:['/sdscshar/advt_03_2026/Test.pdf'],allowedContentTypes:['application/pdf'],
+  maxBytes:10*1024*1024,minIntervalMs:5000};
+ await assert.rejects(fetchOfficialDocument(sourceId,sourceUrl,async()=>{
+  calls++;return new Response('User-agent: *\nDisallow: /',{headers:{'content-type':'text/plain'}});
+ },policy),/robots_disallow/);
+ assert.equal(calls,1);
  assert.throws(()=>extractPdfText(Buffer.from('not pdf')),/invalid_pdf/);
 });
 test('eligibility uses reviewed cutoff and never asserts complete eligibility',()=>{

@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+**/node_modules
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.enc
+*.sql.gz

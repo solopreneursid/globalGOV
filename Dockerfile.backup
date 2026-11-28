@@ -1,0 +1,38 @@
+FROM node:26-bookworm-slim AS node-runtime
+
+FROM postgres:17-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends rsync openssh-client ca-certificates libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+ENV NODE_ENV=production
+ENV PATH="/usr/local/bin:${PATH}"
+ENV HOME=/home/globalgov
+WORKDIR /app
+
+COPY apps/govexam-radar/package.json apps/govexam-radar/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY apps/govexam-radar/postgres-d1.mjs ./
+COPY apps/govexam-radar/encrypted-backup.mjs ./
+COPY apps/govexam-radar/postgres-backup.mjs ./
+COPY apps/govexam-radar/backup-crypto.mjs ./
+COPY apps/govexam-radar/document-backup.mjs ./
+COPY apps/govexam-radar/postgres-restore-test.mjs ./
+COPY apps/govexam-radar/backup-scheduler.mjs ./
+COPY apps/govexam-radar/restore-scheduler.mjs ./
+
+RUN useradd --uid 1000 --create-home globalgov \
+    && mkdir -p /var/lib/globalgov/backups /home/globalgov/.ssh \
+    && chmod 700 /var/lib/globalgov/backups /home/globalgov/.ssh \
+    && chown -R globalgov:globalgov /var/lib/globalgov /home/globalgov
+
+USER globalgov
+ENTRYPOINT ["node"]
+CMD ["backup-scheduler.mjs"]

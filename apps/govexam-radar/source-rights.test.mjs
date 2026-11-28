@@ -4,8 +4,8 @@ import {readFile} from "node:fs/promises";
 import {OFFICIAL_SOURCE_RIGHTS,sourceRights,assertSourceRightsForCommercialRelease} from "./source-rights.mjs";
 const uk="uk-dfe-teaching-vacancies",mb="manitoba-jobs",india="india-employment-news",isro="india-isro-opportunities";
 test("source licence decisions are bounded and never assume one government's licence covers another",()=>{
- assert.equal(OFFICIAL_SOURCE_RIGHTS.length,5);
- assert.equal(new Set(OFFICIAL_SOURCE_RIGHTS.map(x=>x.id)).size,5);
+ assert.equal(OFFICIAL_SOURCE_RIGHTS.length,6);
+ assert.equal(new Set(OFFICIAL_SOURCE_RIGHTS.map(x=>x.id)).size,6);
  const dfe=sourceRights(uk),manitoba=sourceRights(mb),blocked=sourceRights(india);
  assert.equal(dfe.reuseStatus,"conditional_open_licence");
  assert.equal(dfe.commercialReuseApprovedForCurrentFields,true);

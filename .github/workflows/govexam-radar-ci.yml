@@ -10,6 +10,9 @@ on:
       - 'docs/architecture/**'
       - 'README.md'
       - 'MIGRATION.md'
+      - 'Dockerfile.backup'
+      - 'compose.yaml'
+      - 'backup.env.example'
   pull_request:
     paths:
       - 'apps/govexam-radar/**'
@@ -18,10 +21,13 @@ on:
       - 'docs/architecture/**'
       - 'README.md'
       - 'MIGRATION.md'
+      - 'Dockerfile.backup'
+      - 'compose.yaml'
+      - 'backup.env.example'
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 25
     permissions:
       contents: read
     defaults:
@@ -31,13 +37,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '26'
+      - name: Install locked runtime dependencies
+        run: npm ci --no-audit --no-fund
       - name: Unit and API tests
-        run: node --test worker.test.mjs launch-preview.test.mjs launch-monitor.test.mjs source-monitor.test.mjs official-feed.test.mjs manitoba-feed.test.mjs india-employment-news.test.mjs isro-feed.test.mjs ssb-feed.test.mjs moderation.test.mjs collector-bridge.test.mjs collector-client.test.mjs deploy-guard.test.mjs ingestion-status.test.mjs schedule.test.mjs source-rights.test.mjs release-preview.test.mjs uk-release-worker.test.mjs uk-preview-sync.test.mjs uk-release-deploy.test.mjs uk-mirror-worker.test.mjs uk-mirror-status.test.mjs uk-mirror-lifecycle.test.mjs usajobs-history.test.mjs
-      - name: Install browser test runtime
+        run: npm test
+  browser:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/govexam-radar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install locked runtime and matching browser driver
         run: |
-          npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npm ci --no-audit --no-fund
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.56.1
       - name: Browser tests at phone, tablet, and desktop widths
         run: node --test browser.test.mjs uk-release-browser.test.mjs
       - name: Save test screenshots
@@ -175,9 +197,12 @@ jobs:
 
   postgres-schema:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
       - name: Start isolated PostgreSQL 17
         run: |
           docker run -d --name globalgov-schema-test \
@@ -203,6 +228,154 @@ jobs:
           docker exec -i globalgov-schema-test \
             psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
             < infra/self-hosted/postgres/001_core.test.sql
+      - name: Apply first-party operations and evidence schema
+        run: |
+          docker exec -i globalgov-schema-test \
+            psql -U globalgov -d globalgov -v ON_ERROR_STOP=1 \
+            < infra/self-hosted/postgres/002_first_party_operations.sql
+      - name: Install locked PostgreSQL driver
+        working-directory: apps/govexam-radar
+        run: npm ci --no-audit --no-fund
+      - name: Run live PostgreSQL adapter integration tests
+        working-directory: apps/govexam-radar
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: globalgov
+          PGUSER: globalgov
+          PGPASSWORD: globalgov-ci-only
+        run: node --test postgres-d1.integration.test.mjs
+      - name: Validate Compose configuration
+        run: |
+          cp .env.example .env
+          cp backup.env.example .env.backup
+          docker compose config --quiet
+      - name: Build self-hosted runtime image
+        run: docker build --tag globalgov:self-hosted-ci .
+      - name: Build isolated encrypted backup image
+        run: docker build --file Dockerfile.backup --tag globalgov:backup-ci .
       - name: Remove isolated PostgreSQL
         if: always()
         run: docker rm -f globalgov-schema-test || true
+
+  migration-rehearsal:
+    # Uses synthetic fixtures only. No Cloudflare credentials or real D1 export.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: globalgov-ci-rehearsal
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check remote bootstrap shell syntax
+        run: bash -n infra/self-hosted/bootstrap.sh
+      - name: Prepare disposable configuration and private fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cp .env.example .env
+          sed -i 's/^PUBLIC_DOMAIN=.*/PUBLIC_DOMAIN=localhost/;s/^POSTGRES_DB=.*/POSTGRES_DB=globalgov_ci_rehearsal/;s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-admin/;s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/;s/^BACKUP_DB_PASSWORD=.*/BACKUP_DB_PASSWORD=ci-only-backup/;s/^RESTORE_TEST_DB_PASSWORD=.*/RESTORE_TEST_DB_PASSWORD=ci-only-restore/' .env
+          key=$(openssl rand -hex 32)
+          echo "::add-mask::$key"
+          printf 'GLOBALGOV_BACKUP_KEY_HEX=%s\nBACKUP_REQUIRE_REMOTE=false\nBACKUP_REMOTE_TARGET=\nBACKUP_RETENTION_DAYS=14\n' "$key" > .env.backup
+          mkdir -p "$RUNNER_TEMP/globalgov-fixture" secrets/ssh
+          cp infra/self-hosted/fixtures/d1-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/export.sql"
+          cp infra/self-hosted/fixtures/d1-uk-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/uk.sql"
+          sudo chown -R 1000:1000 "$RUNNER_TEMP/globalgov-fixture"
+          sudo chmod 700 "$RUNNER_TEMP/globalgov-fixture"
+          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/export.sql" "$RUNNER_TEMP/globalgov-fixture/uk.sql"
+      - name: Build and initialize an empty isolated PostgreSQL deployment
+        run: |
+          docker compose config --quiet
+          docker compose --profile tools build migrate app backup restore-scheduler
+          docker compose up -d --wait postgres
+          docker compose --profile tools run --rm --no-deps migrate
+      - name: Encrypt, plan and apply the synthetic D1 export
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .env.backup
+          fixture="$RUNNER_TEMP/globalgov-fixture:/migration"
+          docker compose --profile tools run --rm --no-deps -v "$fixture" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node d1-export-backup.mjs encrypt /migration/export.sql /migration/export.enc
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node postgres-import.mjs plan /migration/export.enc > "$RUNNER_TEMP/plan.json"
+          jq -e '.state == "planned" and .writesPerformed == false and .tableCount == 12 and .totalRows == 12' "$RUNNER_TEMP/plan.json"
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply /migration/export.enc > "$RUNNER_TEMP/apply.json"
+          jq -e '.state == "verified" and .writesPerformed == true and .tableCount == 12 and .totalRows == 12' "$RUNNER_TEMP/apply.json"
+          jq -e -s '.[0].counts == .[1].counts and .[0].checksums == .[1].checksums' "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/apply.json"
+          if docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply /migration/export.enc; then
+            echo "Non-empty target was not rejected" >&2
+            exit 1
+          fi
+      - name: Reconcile isolated UK snapshot without exposing archive to app
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .env.backup
+          fixture="$RUNNER_TEMP/globalgov-fixture:/migration"
+          docker compose --profile tools run --rm --no-deps -v "$fixture" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node d1-export-backup.mjs encrypt-uk /migration/uk.sql /migration/uk.enc
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node postgres-import.mjs plan-uk /migration/uk.enc > "$RUNNER_TEMP/uk-plan.json"
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply-uk /migration/uk.enc > "$RUNNER_TEMP/uk-apply.json"
+          jq -e '.state == "verified" and .tableCount == 4 and .totalRows == 4' "$RUNNER_TEMP/uk-apply.json"
+          jq -e -s '.[0].counts == .[1].counts and .[0].checksums == .[1].checksums' "$RUNNER_TEMP/uk-plan.json" "$RUNNER_TEMP/uk-apply.json"
+          docker compose exec -T postgres psql -U globalgov_admin -d globalgov_ci_rehearsal -v ON_ERROR_STOP=1 -Atc "SELECT NOT has_schema_privilege('globalgov_app','uk_archive','USAGE') AND has_schema_privilege('globalgov_backup','uk_archive','USAGE') AND (SELECT COUNT(*) FROM public.official_job_notices)=1 AND (SELECT COUNT(*) FROM uk_archive.official_job_notices)=1" | grep -qx t
+      - name: Verify application using the restored database
+        run: |
+          docker compose up -d --wait app
+          docker compose exec -T app node -e 'Promise.all(["/internal/ready","/api/health","/","/lite","/privacy","/terms"].map(async p=>{const r=await fetch("http://127.0.0.1:8080"+p);if(!r.ok)throw Error(p+": "+r.status)})).catch(e=>{console.error(e);process.exitCode=1})'
+      - name: Create real encrypted database and document backups
+        run: |
+          docker compose run --rm --no-deps backup postgres-backup.mjs > "$RUNNER_TEMP/backup.json"
+          jq -e '.state == "ok" and .archiveVerified == true and .documentArchiveVerified == true and .remoteCopyCompleted == false' "$RUNNER_TEMP/backup.json"
+      - name: Restore the encrypted backup in a new isolated database
+        run: |
+          docker compose run --rm --no-deps restore-scheduler postgres-restore-test.mjs > "$RUNNER_TEMP/restore.json"
+          jq -e '.state == "verified" and .temporaryDatabaseDropped == true and .documentArchiveVerified == true' "$RUNNER_TEMP/restore.json"
+          jq -e -s '.[0].counts as $expected | .[1].counts as $actual | all($expected | to_entries[]; $actual[.key] == .value)' "$RUNNER_TEMP/apply.json" "$RUNNER_TEMP/restore.json"
+          jq -e -s '.[0].counts == .[1].ukArchiveCounts' "$RUNNER_TEMP/uk-apply.json" "$RUNNER_TEMP/restore.json"
+      - name: Destroy only disposable CI resources
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  nyc-public-source-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify NYC probe with synthetic fixtures
+        run: node --test apps/govexam-radar/probe-nyc-open-data.test.mjs
+      - name: Check official public API anonymously (research only)
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-nyc-open-data.mjs
+      - name: Verify complete bounded NYC snapshot and current-date normalization (research only)
+        continue-on-error: true
+        run: node apps/govexam-radar/probe-nyc-open-data.mjs --full
+
+  hosted-baseline:
+    # Read-only evidence about the already deployed preview; NOT proof that
+    # this pull request's code is deployed, and never activates production.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify existing hosted preview health and source scope without mutations
+        run: |
+          node --input-type=module <<'NODE'
+          const origin="https://hqventures-govexam-parity-preview.solopreneursid-proy.workers.dev";
+          const read=async path=>{const r=await fetch(origin+path,{redirect:"error",signal:AbortSignal.timeout(20000),cache:"no-store"});if(!r.ok)throw Error("hosted_http_"+r.status);return r.json();};
+          const [health,notices,status]=await Promise.all([read("/api/health"),read("/api/notices?source=uk-dfe-teaching-vacancies&limit=1"),read("/api/ingestion-status")]);
+          if(health.status!=="ok"||notices.publicLaunchAuthorized!==false||!Number.isSafeInteger(notices.total)||notices.total<1||notices.notices?.length!==1||notices.notices[0].sourceId!=="uk-dfe-teaching-vacancies")throw Error("hosted_baseline_contract_failed");
+          const uk=status.automation?.sources?.find(x=>x.sourceId==="uk-dfe-teaching-vacancies");
+          if(!uk?.scheduledSuccessObserved||!uk?.twoCycleNativeProof)throw Error("hosted_uk_native_cycles_unconfirmed");
+          console.log(JSON.stringify({existingPreviewOnly:true,version:health.version,ukOpenNotices:notices.total,ukTwoCycleProof:uk.twoCycleNativeProof,candidateCodeDeployed:false}));
+          NODE
