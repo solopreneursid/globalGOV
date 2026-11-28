@@ -1,7 +1,6 @@
 // GovRadar government recruitment feed adapter, source-bound and portable SQLite/D1.
-import { NYC_SOURCE } from "./nyc-feed.mjs";
 import { INDIA_EMPLOYMENT_NEWS } from "./india-employment-news.mjs";
-import {OFFICIAL_SOURCE_RIGHTS,allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
+import {NYC_SOURCE,OFFICIAL_SOURCE_RIGHTS,allowedCommercialPreviewSources,allowedIsroPreviewSource,allowedSsbPreviewSource} from "./source-rights.mjs";
 import {ISRO_SOURCE,isroPublicationGate} from "./isro-feed.mjs";
 import {SSB_SOURCE,ssbPublicationGate} from "./ssb-feed.mjs";
 // First supported adapter: UK Department for Education Teaching Vacancies (OGL v3).
