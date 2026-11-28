@@ -71,6 +71,7 @@ const DEFAULT_POLICY = Object.freeze({
 
 const hostQueues = new Map();
 const lastRequestAt = new Map();
+const hostCrawlDelay = new Map();
 
 function normalizedSourceUrl(source) {
   if (!source || typeof source.url !== "string") throw new Error("source_url_required");
@@ -175,7 +176,7 @@ export function parseRobotsRules(text, userAgent = "globalGOV", requestPath = "/
     } else if (group && ["allow", "disallow"].includes(key)) {
       group.hasRules = true;
       if (value) {
-        if (!value.startsWith("/") || value.length>2048 || /\$(?!$)/.test(value)) {
+        if (!(value.startsWith("/") || value.startsWith("*/")) || value.length>2048 || /\$(?!$)/.test(value)) {
           throw new Error("robots_rule_syntax_unconfirmed");
         }
         group.rules.push({ allow: key === "allow", path: value, normalized: robotsNormalize(value) });
@@ -239,7 +240,7 @@ async function serializeHostStart(host, minIntervalMs, now, sleep) {
   await previous;
   try {
     const current = now();
-    const wait = Math.max(0, (lastRequestAt.get(host) || 0) + minIntervalMs - current);
+    const wait = Math.max(0, (lastRequestAt.get(host) || 0) + Math.max(minIntervalMs,hostCrawlDelay.get(host)||0) - current);
     if (wait > 0) await sleep(wait);
     lastRequestAt.set(host, now());
   } finally {
@@ -297,6 +298,7 @@ export async function fetchOfficialSource({
     const decision = parseRobotsRules(robotsBody, userAgent, target.pathname + target.search);
     if (!decision.allowed) throw new Error("robots_disallow");
     crawlDelayMs=decision.delayMs||0;
+    hostCrawlDelay.set(policy.host,crawlDelayMs);
   } else {
     await robots.body?.cancel().catch(() => {});
     throw new Error("robots_access_unconfirmed_" + robots.status);
@@ -337,4 +339,5 @@ export async function fetchOfficialSource({
 export function resetSourceConnectorRateLimitsForTests() {
   hostQueues.clear();
   lastRequestAt.clear();
+  hostCrawlDelay.clear();
 }
