@@ -7,6 +7,7 @@ import {tmpdir} from "node:os";
 import {compileCatalogue,LIMITS} from "./static-publisher.mjs";
 import {buildRelease} from "./static-build.mjs";
 import {SNAPSHOT_SQL,acquireSnapshot} from "./static-snapshot.mjs";
+import {verifyStaticTarget} from "./static-deploy-preflight.mjs";
 import {collectionSlot,reserveCollection,BUDGET,runZeroCostCollection} from "./zero-cost-collector.mjs";
 const now=Date.parse("2026-11-28T12:00:00Z"),hour=3600000;
 const row={source_id:"uk-dfe-teaching-vacancies",title:"Synthetic <test> role",employer:"Synthetic school",region:"Test region",source_page:"https://teaching-vacancies.service.gov.uk/jobs/synthetic-role",closing_at:new Date(now+hour).toISOString(),last_seen_at:now-1000,review_state:"official_feed_unreviewed",life_status:"open"};
@@ -69,12 +70,24 @@ test("snapshot API refuses unverified cost and oversized responses",async()=>{
 test("durable SQLite ledger allows eight slots and denies repeated claims",async()=>{
  const sql=new DatabaseSync(":memory:");
  try{
-  sql.exec(await readFile(new URL("./zero-cost-schema.sql",import.meta.url),"utf8"));
+  sql.exec("CREATE TABLE source_ingest_runs(id TEXT PRIMARY KEY,source_id TEXT,started_at INTEGER,finished_at INTEGER,state TEXT,http_status INTEGER,received INTEGER,accepted INTEGER,discarded INTEGER,error_code TEXT,details TEXT);");
   const db={prepare(q){return{bind(...args){return{async run(){const r=sql.prepare(q).run(...args);return{meta:{changes:Number(r.changes)}}}}}}}};
   const start=Date.parse("2026-11-28T00:00:00Z");
   for(let i=0;i<8;i++){const t=start+i*3*hour,s=collectionSlot(t);assert.equal(await reserveCollection(db,s,t),true);assert.equal(await reserveCollection(db,s,t),false);}
-  const r=sql.prepare("SELECT * FROM zero_cost_days").get();
-  assert.equal(r.reserved_reads,BUDGET.reads);assert.equal(r.reserved_writes,BUDGET.writes);assert.equal(r.reserved_fetches,BUDGET.fetches);
+  const r=sql.prepare("SELECT COUNT(*) AS n,SUM(json_extract(details,'$.reservedReads')) AS reads,SUM(json_extract(details,'$.reservedWrites')) AS writes,SUM(json_extract(details,'$.reservedFetches')) AS fetches FROM source_ingest_runs").get();
+  assert.equal(r.n,8);assert.equal(r.reads,BUDGET.reads);assert.equal(r.writes,BUDGET.writes);assert.equal(r.fetches,BUDGET.fetches);
   assert.equal((await runZeroCostCollection({db,scheduledTime:start,now:start,fetcher:async()=>{throw Error("must not fetch")}})).state,"blocked");
  }finally{sql.close();}
+});
+
+test("deployment preflight refuses production, external domains and absent approval",async()=>{
+ const account="69234e51e08d8013980a7ff869746609",token="synthetic-pages-test-token";
+ const project={name:"globalgov-static",production_branch:"main",source:null,domains:["globalgov-static.pages.dev"]};
+ const fetcher=async url=>Response.json({success:true,result:url.includes("/deployments?")?[]:project});
+ assert.equal((await verifyStaticTarget({account,token,approved:"true",fetcher,now})).branch,"zero-cost-preview");
+ await assert.rejects(verifyStaticTarget({account,token,approved:"false",fetcher,now}),/approval/);
+ project.production_branch="zero-cost-preview";
+ await assert.rejects(verifyStaticTarget({account,token,approved:"true",fetcher,now}),/unexpected/);
+ project.production_branch="main";project.domains.push("globalgov.example.com");
+ await assert.rejects(verifyStaticTarget({account,token,approved:"true",fetcher,now}),/unexpected/);
 });
