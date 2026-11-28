@@ -42,10 +42,24 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Unit and API tests
         run: npm test
-      - name: Install browser test runtime
+  browser:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/govexam-radar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install locked runtime and matching browser driver
         run: |
-          npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npm ci --no-audit --no-fund
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.56.1
       - name: Browser tests at phone, tablet, and desktop widths
         run: node --test browser.test.mjs uk-release-browser.test.mjs
       - name: Save test screenshots
@@ -243,3 +257,67 @@ jobs:
       - name: Remove isolated PostgreSQL
         if: always()
         run: docker rm -f globalgov-schema-test || true
+
+  migration-rehearsal:
+    # Uses synthetic fixtures only. No Cloudflare credentials or real D1 export.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: globalgov-ci-rehearsal
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare disposable configuration and private fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cp .env.example .env
+          sed -i 's/^PUBLIC_DOMAIN=.*/PUBLIC_DOMAIN=localhost/;s/^POSTGRES_DB=.*/POSTGRES_DB=globalgov_ci_rehearsal/;s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-admin/;s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/;s/^BACKUP_DB_PASSWORD=.*/BACKUP_DB_PASSWORD=ci-only-backup/;s/^RESTORE_TEST_DB_PASSWORD=.*/RESTORE_TEST_DB_PASSWORD=ci-only-restore/' .env
+          key=$(openssl rand -hex 32)
+          echo "::add-mask::$key"
+          printf 'GLOBALGOV_BACKUP_KEY_HEX=%s\nBACKUP_REQUIRE_REMOTE=false\nBACKUP_REMOTE_TARGET=\nBACKUP_RETENTION_DAYS=14\n' "$key" > .env.backup
+          mkdir -p "$RUNNER_TEMP/globalgov-fixture" secrets/ssh
+          cp infra/self-hosted/fixtures/d1-rehearsal.sql "$RUNNER_TEMP/globalgov-fixture/export.sql"
+          sudo chown -R 1000:1000 "$RUNNER_TEMP/globalgov-fixture"
+          sudo chmod 700 "$RUNNER_TEMP/globalgov-fixture"
+          sudo chmod 600 "$RUNNER_TEMP/globalgov-fixture/export.sql"
+      - name: Build and initialize an empty isolated PostgreSQL deployment
+        run: |
+          docker compose config --quiet
+          docker compose --profile tools build migrate app backup restore-scheduler
+          docker compose up -d --wait postgres
+          docker compose --profile tools run --rm --no-deps migrate
+      - name: Encrypt, plan and apply the synthetic D1 export
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .env.backup
+          fixture="$RUNNER_TEMP/globalgov-fixture:/migration"
+          docker compose --profile tools run --rm --no-deps -v "$fixture" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node d1-export-backup.mjs encrypt /migration/export.sql /migration/export.enc
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" migrate node postgres-import.mjs plan /migration/export.enc > "$RUNNER_TEMP/plan.json"
+          jq -e '.state == "planned" and .writesPerformed == false and .tableCount == 12 and .totalRows == 12' "$RUNNER_TEMP/plan.json"
+          docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply /migration/export.enc > "$RUNNER_TEMP/apply.json"
+          jq -e '.state == "verified" and .writesPerformed == true and .tableCount == 12 and .totalRows == 12' "$RUNNER_TEMP/apply.json"
+          jq -e -s '.[0].counts == .[1].counts and .[0].checksums == .[1].checksums' "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/apply.json"
+          if docker compose --profile tools run --rm --no-deps -v "$fixture:ro" -e GLOBALGOV_BACKUP_KEY_HEX="$GLOBALGOV_BACKUP_KEY_HEX" -e GLOBALGOV_IMPORT_ALLOW_WRITE=true -e GLOBALGOV_IMPORT_CONFIRM_DATABASE=globalgov_ci_rehearsal migrate node postgres-import.mjs apply /migration/export.enc; then
+            echo "Non-empty target was not rejected" >&2
+            exit 1
+          fi
+      - name: Verify application using the restored database
+        run: |
+          docker compose up -d --wait app
+          docker compose exec -T app node -e 'Promise.all(["/internal/ready","/api/health","/","/lite","/privacy","/terms"].map(async p=>{const r=await fetch("http://127.0.0.1:8080"+p);if(!r.ok)throw Error(p+": "+r.status)})).catch(e=>{console.error(e);process.exitCode=1})'
+      - name: Create real encrypted database and document backups
+        run: |
+          docker compose run --rm --no-deps backup postgres-backup.mjs > "$RUNNER_TEMP/backup.json"
+          jq -e '.state == "ok" and .archiveVerified == true and .documentArchiveVerified == true and .remoteCopyCompleted == false' "$RUNNER_TEMP/backup.json"
+      - name: Restore the encrypted backup in a new isolated database
+        run: |
+          docker compose run --rm --no-deps restore-scheduler postgres-restore-test.mjs > "$RUNNER_TEMP/restore.json"
+          jq -e '.state == "verified" and .temporaryDatabaseDropped == true and .documentArchiveVerified == true' "$RUNNER_TEMP/restore.json"
+          jq -e -s '.[0].counts as $expected | .[1].counts as $actual | all($expected | to_entries[]; $actual[.key] == .value)' "$RUNNER_TEMP/apply.json" "$RUNNER_TEMP/restore.json"
+      - name: Destroy only disposable CI resources
+        if: always()
+        run: docker compose down --volumes --remove-orphans
