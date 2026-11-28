@@ -1,0 +1,23 @@
+# globalGOV — zero-cost static profile
+
+This profile preserves the existing Cloudflare and portable Node/PostgreSQL runtime until independently verified cutover. No production deployment or paid resource is created by repository CI. All ordinary browsing/search uses static files, not a Worker or D1 call. Initial supported publication source is UK DfE only; neither directory membership nor a successful fetch permits republication of other sources.
+
+## Operating model
+
+- Existing direct official recruitment collection remains active until explicitly replaced; avoid overlapping Cron collectors against the same database.
+- The new `zero-cost-collector.mjs` is an isolated candidate with no public database route. Each 3-hour UTC slot atomically reserves its budget in the existing ingestion audit table. It permits at most eight slots per day, 25,000 read rows, 1,500 write rows and four fetches per slot. Actual query counters are measured after execution; one statement can overshoot a limit. Provider quotas remain the hard account ceiling. No migration of the canonical schema is needed.
+- A consistent bounded D1 snapshot includes only UK DfE records that are open, reviewed by the existing feed policy, seen within five days, and have two recent distinct successful native source cycles. The live read-only query on 2026-11-28 returned 1,811 candidates, 5,641 rows read and zero writes; no invalid or duplicate URLs were observed in that aggregate check. This is not deployment evidence.
+- The compiler emits individual static pages, regional pages, partitioned JSON search, lightweight CSS/JS, preview robots controls, security headers and an asset hash manifest outside the public directory. Static preview is always noindex. No JobPosting schema is emitted without a verified eligible page and production review. It publishes an entire new immutable local build by rename. Hosting-side content-addressed upload can reuse identical assets; true per-page incremental regeneration is not yet implemented.
+- Expiry is enforced in the browser using deadline and six-hour snapshot validity. With JS disabled the page is explicitly a dated snapshot and the official source is authoritative. A static deployment cannot guarantee server-side expiry or immediate withdrawal during outage. Production indexing requires a separate verified expiry/tombstone strategy.
+- The proposed build cadence is every three hours at UTC minute 45, up to 248 releases in a 31-day month. The workflow only reads D1; it does not crawl sources. It refuses deployment after 250 visible monthly project releases and refuses unknown projects, external custom domains and the production branch. Account-wide usage and history retention can make the project count incomplete; the per-project guard is not a billing guarantee.
+
+## Activation gates
+
+1. Verify the Cloudflare account subscription and account-wide Worker/D1/Pages usage in the dashboard. The current connector cannot read subscriptions (HTTP 403). No paid plan changes or new services authorized by this profile.
+2. Review CI, synthetic scale result and real snapshot suitability. If proceeding, use a dedicated empty Direct Upload Pages project `globalgov-static`, production branch `main`, no custom domains and no functions. Do not bind a new domain or replace the current site.
+3. Configure a protected GitHub environment `globalgov-static-preview` with separate least-privilege D1-read and Pages-write secrets (`GLOBALGOV_D1_READ_TOKEN`, `GLOBALGOV_PAGES_TOKEN`), account variable `GLOBALGOV_CF_ACCOUNT_ID` and explicit owner flag `GLOBALGOV_ZERO_COST_APPROVED=true` only after account quota and billing verification. Check available permissions; do not paste tokens into chat or commit them. If scoped D1 read is unavailable, stop.
+4. Merge reviewed source only after prior PR #18 and this PR pass. Scheduled workflows execute only from main. Verify the dedicated noindex preview through two consecutive builds. No live deployment currently exists.
+5. Rehearse zero-cost collector in isolated D1, verify provider CPU/SQL usage, source access and source continuity; stop legacy cron only after verified replacement. Do not run duplicate collectors.
+6. Complete withdrawal/expiry and SEO, broader source policy validation, real encrypted backup recovery, cost monitoring and final release acceptance before switching production routing.
+
+The existing encrypted D1 archive and PostgreSQL recovery tools remain intact. No personal computer or VPS is required for this proposed profile. Free-tier operation is conditional on account capacity and provider policies; no claim of indefinite free hosting or zero operating cost is made.
