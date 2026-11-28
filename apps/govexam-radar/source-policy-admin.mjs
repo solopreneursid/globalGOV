@@ -1,16 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { createPostgresPoolFromEnv } from "./postgres-d1.mjs";
-import { SOURCES } from "./worker.js";
-import { DFE_SOURCE } from "./official-feed.mjs";
-import { MANITOBA } from "./manitoba-feed.mjs";
-import { ISRO_SOURCE } from "./isro-feed.mjs";
-import { SSB_SOURCE } from "./ssb-feed.mjs";
-import { mergeSourcePolicySources, recordSourcePolicyReview } from "./source-policy.mjs";
-
-const POLICY_SOURCES = mergeSourcePolicySources(SOURCES, [
-  { id: DFE_SOURCE.id, name: DFE_SOURCE.name, country: DFE_SOURCE.country, url: DFE_SOURCE.api },
-  MANITOBA, ISRO_SOURCE, SSB_SOURCE
-]);
+import { POLICY_SOURCES } from "./worker.js";
+import { recordSourcePolicyReview } from "./source-policy.mjs";
 
 function parseArguments(args) {
   const values = {};
