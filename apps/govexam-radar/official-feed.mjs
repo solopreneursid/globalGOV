@@ -263,7 +263,7 @@ export async function serveOfficialNotices(db,params,scope="research",publicatio
   if(stream){where.push("stream=?");bind.push(stream);}
   if(keyword){where.push("(title LIKE ? OR employer LIKE ? OR region LIKE ? OR jurisdiction_name LIKE ?)");bind.push(...Array(4).fill("%"+keyword+"%"));}
   const sqlWhere=where.join(" AND ");
-  const rows=await db.prepare("SELECT id,source_id as sourceId,title,employer,country,region,stream,source_page as sourceUrl,source_ref as sourceReference,published_at as publishedAt,closing_at as closingAt,first_seen_at as firstSeenAt,last_seen_at as lastSeenAt,review_state as reviewState,jurisdiction_code as jurisdictionCode,jurisdiction_name as jurisdiction,government_tier as level,employer_type as employerType FROM official_job_notices WHERE "+sqlWhere+" ORDER BY last_seen_at DESC,id ASC LIMIT ? OFFSET ?")
+  const rows=await db.prepare("SELECT id,source_id as sourceId,title,employer,country,region,stream,source_page as sourceUrl,"+(nycGate.ready&&releaseSourceIds?.includes(NYC_SOURCE.id)?"source_ref as sourceReference,":"")+"published_at as publishedAt,closing_at as closingAt,first_seen_at as firstSeenAt,last_seen_at as lastSeenAt,review_state as reviewState,jurisdiction_code as jurisdictionCode,jurisdiction_name as jurisdiction,government_tier as level,employer_type as employerType FROM official_job_notices WHERE "+sqlWhere+" ORDER BY last_seen_at DESC,id ASC LIMIT ? OFFSET ?")
    .bind(...bind,limit,(page-1)*limit).all();
   const total=await db.prepare("SELECT COUNT(*) AS total FROM official_job_notices WHERE "+sqlWhere).bind(...bind).first();
   // Rights must be scoped to each source; OGL covers only the UK DfE data.
@@ -338,7 +338,7 @@ export async function servePublicIngestionStatus(db,publication=null){
   const gate=await isroPublicationGate(db),candidate=allowedIsroPreviewSource();
   const ssbGate=await ssbPublicationGate(db),ssbCandidate=allowedSsbPreviewSource();
   const checks=new Map([[candidate,gate],[ssbCandidate,ssbGate]]);
-  if(publication?.nycGate)checks.set(NYC_SOURCE.id,publication.nycGate);
+  if(publication?.allowedIds.includes(NYC_SOURCE.id)&&publication.nycGate)checks.set(NYC_SOURCE.id,publication.nycGate);
   const ids=allowedCommercialPreviewSources();for(const [id,g] of checks)if(g.ready)ids.push(id);
   const visibleIds=publication?ids.filter(id=>publication.allowedIds.includes(id)):ids;
   const auditIds=[...allowedCommercialPreviewSources(),...checks.keys()];
@@ -356,6 +356,6 @@ export async function servePublicIngestionStatus(db,publication=null){
    return {sourceId,scheduledSuccessObserved:!!last,freshSuccess:checks.has(sourceId)?checks.get(sourceId).ready:!!last&&now-last<86400000,recentNativeSuccessCount:count,twoCycleNativeProof:checks.has(sourceId)?checks.get(sourceId).ready:count>=2&&!!last&&now-last<=5*3600000&&row.lastNativeAttemptAt===last,lastSuccessfulScheduledAt:last,lastNativeAttemptAt:row.lastNativeAttemptAt||null};
   });
   const rows=bySource.results||[];
-  return json({source:"approved preview sources",openImportedNotices:rows.reduce((n,x)=>n+(Number(x.count)||0),0),bySource:rows,latest:latest.results||[],automation:{observedForAllSources:sources.every(x=>x.scheduledSuccessObserved),healthy:sources.every(x=>x.freshSuccess),twoCycleCronGatePassed:sources.every(x=>x.twoCycleNativeProof),sources},indiaSourceCheck:{ready:gate.ready,lastCheckAt:gate.lastCheckAt||null,successfulCycles:gate.successfulCycles||0},indiaSourceChecks:Object.fromEntries(checks),status:"official_feed_imports_not_independently_verified"});
+  return json({source:"approved preview sources",openImportedNotices:rows.reduce((n,x)=>n+(Number(x.count)||0),0),bySource:rows,latest:latest.results||[],automation:{observedForAllSources:sources.every(x=>x.scheduledSuccessObserved),healthy:sources.every(x=>x.freshSuccess),twoCycleCronGatePassed:sources.every(x=>x.twoCycleNativeProof),sources},indiaSourceCheck:{ready:gate.ready,lastCheckAt:gate.lastCheckAt||null,successfulCycles:gate.successfulCycles||0},indiaSourceChecks:Object.fromEntries([...checks].filter(([id])=>id!==NYC_SOURCE.id)),...(publication?.nycGate?{nycSourceCheck:publication.nycGate}:{}),status:"official_feed_imports_not_independently_verified"});
  }catch(e){console.error(JSON.stringify({event:"public_ingestion_status_failed",reason:String(e?.message||e).slice(0,150)}));return json({error:"status_unavailable"},503);}
 }
