@@ -73,6 +73,21 @@ async function resolveScheduledSourcePolicy(env, sourceId, targetUrl) {
   }
 }
 
+export async function portablePublicationContext(env){
+ if(env?.REQUIRE_SOURCE_POLICY_REGISTRY!=="true")return null;
+ const allowedIds=[];
+ const candidates=[{id:DFE_SOURCE.id,url:DFE_SOURCE.api},ISRO_SOURCE];
+ if(env.SSB_AUTOMATED_ACCESS_APPROVED==="true")candidates.push(SSB_SOURCE);
+ if(env.GLOBALGOV_NYC_PUBLICATION==="true")candidates.push(NYC_SOURCE);
+ for(const source of candidates){
+  const gate=await resolveScheduledSourcePolicy(env,source.id,source.url);
+  const policy=gate.policy;
+  if(policy&&(policy.commercialReuseApproved===true||policy.reuseStatus==="conditional")&&!["not_approved","review_required","not_assessed"].includes(policy.reuseStatus))allowedIds.push(source.id);
+ }
+ const nycGate=allowedIds.includes(NYC_SOURCE.id)?await nycPublicationGate(env.DB):{ready:false,reason:"not_enabled_or_policy_blocked"};
+ return {allowedIds,nycGate};
+}
+
 async function recordSourcePolicyBlock(db, sourceId, targetUrl, errorCode) {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -239,10 +254,10 @@ export default {
     if (path === "/api/reviewed-recruitment") return JSONResponse(await readReviewedCatalog(),200,"no-store");
     if(path==="/api/usajobs/history")return handleUsajobsHistory(request,{fetcher:env?.USAJOBS_FETCH||fetch});
     if(path==="/api/usajobs/announcement-text")return handleUsajobsAnnouncementText(request,{fetcher:env?.USAJOBS_FETCH||fetch});
-    if (path === "/api/notices") return serveOfficialNotices(env?.DB,url.searchParams,"approved_staging");
-    if (path === "/api/release-preview/notices") return serveOfficialNotices(env?.DB,url.searchParams,"uk_only_release_preview");
-    if (path === "/api/ingestion-status") return servePublicIngestionStatus(env?.DB);
-    if (path === "/api/notice-changes") return serveNoticeChanges(env?.DB,url.searchParams,"approved_staging");
+    if (path === "/api/notices") return serveOfficialNotices(env?.DB,url.searchParams,"approved_staging",await portablePublicationContext(env));
+    if (path === "/api/release-preview/notices") return serveOfficialNotices(env?.DB,url.searchParams,"uk_only_release_preview",await portablePublicationContext(env));
+    if (path === "/api/ingestion-status") return servePublicIngestionStatus(env?.DB,await portablePublicationContext(env));
+    if (path === "/api/notice-changes") return serveNoticeChanges(env?.DB,url.searchParams,"approved_staging",await portablePublicationContext(env));
     if (path === "/api/catalog") return JSONResponse({ version: VERSION, catalogUpdatedAt: "2026-11-16", sources: SOURCES, leads: [], verifiedListings: [], directoryTotal: SOURCES.length, newRegionalPortals: REGIONAL_SOURCES.length, notice: "State, province, devolved, prefectural and municipal portals are directories; they are not automatically imported vacancies. Source-gated UK, ISRO and SSB records are at /api/notices. USAJOBS Historic JOAs and Announcement Text are available as a separate closed-record archive at /usajobs-history. Email is not delivered." }, 200, "no-store");
     if (path === "/api/check") {
       const source = SOURCES.find(s=>s.id===url.searchParams.get("id"));
