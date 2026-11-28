@@ -26,8 +26,8 @@ Use only an empty disposable PostgreSQL database. This does not migrate D1 data.
 3. Validate configuration: `docker compose config --quiet`.
 4. Build the runtime and backup images: `docker compose build`.
 5. Initialize an empty PostgreSQL database and grant the separate runtime roles: `docker compose --profile tools run --rm migrate`.
-6. Start only the local app-facing services: `docker compose up -d app scheduler monitor caddy`. Do not start `backup` or `restore-scheduler` until the encryption key, remote target and pinned SSH host key are configured.
-7. Check `docker compose ps` and `docker compose logs app scheduler monitor`.
+6. Start only the application: `docker compose up -d --wait app`. Do not start the scheduler, Caddy, or monitor during initial snapshot reconciliation. Enable those separately after verifying the test origin and permitted source schedules. Do not start `backup` or `restore-scheduler` until the encryption key, remote target and pinned SSH host key are configured.
+7. Check `docker compose ps` and `docker compose logs app`; use `docker compose exec -T app node -e 'fetch("http://127.0.0.1:8080/internal/ready").then(r=>{if(!r.ok)process.exitCode=1;console.log(r.status)}).catch(()=>{process.exitCode=1})'` for internal readiness.
 
 For a local Caddy certificate, the browser may require trusting Caddy's local development CA. Do not expose this localhost configuration publicly. A public host needs a real domain pointed directly to the owner-controlled server, inbound TCP 80/443, and a publicly trusted certificate.
 
@@ -75,7 +75,7 @@ The backup service runs daily at 02:15 UTC. It creates an AES-256-GCM encrypted 
 The PostgreSQL roles are separated:
 - `globalgov_admin`: database initialization and schema migrations only.
 - `globalgov_app`: application and scheduler table/sequence privileges; no role or database creation.
-- `globalgov_backup`: `pg_read_all_data` plus read/write access to `backup_runs`; no `CREATEDB`.
+- `globalgov_backup`: read access to application-schema tables and sequences in the configured database, plus read/write access to `backup_runs`; no `CREATEDB` or cluster-wide reader membership.
 - `RESTORE_TEST_DB_USER`: `CREATEDB` and maintenance-database connection only; used by the isolated restore scheduler, not the app or backup worker.
 
 Before enabling the backup service:
@@ -87,4 +87,4 @@ Before enabling the backup service:
 5. Run `docker compose config --quiet`, build the stack, apply migrations to an empty test database, then start the backup service.
 6. Verify `backup_runs` shows both local archives, remote hashes, archive verification, and the latest monthly restore timestamps. A successful CI image build does not count as an actual backup or restore test.
 
-Use `docker compose run --rm restore-scheduler node postgres-restore-test.mjs` for an owner-triggered restore test against the latest successful backup. It does not modify the source database; it creates and drops a temporary database on the same PostgreSQL server.
+Use `docker compose run --rm restore-scheduler postgres-restore-test.mjs` for an owner-triggered restore test against the latest successful backup. It does not modify the source database; it creates and drops a temporary database on the same PostgreSQL server.
