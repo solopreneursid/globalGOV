@@ -32,14 +32,14 @@ test("real browser: search, current membership, no-JS, expiry, withdrawal and ve
   assert.ok(requests.every(x=>new URL(x).origin===base&&!new URL(x).pathname.startsWith("/api/")));
   const job=page.locator("[data-job-id]");
   await page.route("**/"+active,route=>route.fulfill({json:{generatedAt:now,jobs:{}}}));
-  await page.reload();await page.locator("#stale").waitFor({state:"visible"});
+  await page.reload();await page.locator("[data-job-id][data-validation=blocked]").waitFor({state:"attached"});await page.locator("#stale").waitFor({state:"visible"});
   assert.equal(await job.isVisible(),false);
   await page.unroute("**/"+active);
   await page.route("**/"+active,route=>route.fulfill({json:{...JSON.parse(files.get(active)),generatedAt:now-1}}));
-  await page.reload();await page.locator("#stale").waitFor({state:"visible"});assert.equal(await job.isVisible(),false);
+  await page.reload();await page.locator("[data-job-id][data-validation=blocked]").waitFor({state:"attached"});await page.locator("#stale").waitFor({state:"visible"});assert.equal(await job.isVisible(),false);
   await page.unroute("**/"+active);
   await page.route("**/index/manifest.json",route=>route.fulfill({json:{...JSON.parse(files.get("index/manifest.json")),validUntil:now-1}}));
-  await page.reload();await page.locator("#stale").waitFor({state:"visible"});assert.equal(await job.isVisible(),false);
+  await page.reload();await page.locator("[data-job-id][data-validation=blocked]").waitFor({state:"attached"});await page.locator("#stale").waitFor({state:"visible"});assert.equal(await job.isVisible(),false);
   await context.close();
   const noJs=await browser.newContext({javaScriptEnabled:false});
   const disabled=await noJs.newPage();await disabled.goto(base+"/"+path.replace(/index\.html$/,""));
