@@ -13,7 +13,7 @@ import { OFFICIAL_UI_JS } from "./official-ui.mjs";
 import {RELEASE_PREVIEW_HTML,RELEASE_PREVIEW_CSS,RELEASE_PREVIEW_JS} from "./release-preview-ui.mjs";
 import { combinedSources, filterSources, REGIONAL_SOURCES } from "./regional-sources.mjs";
 import { buildSourceConnectorInventory, fetchOfficialSource } from "./source-connectors.mjs";
-import { getApprovedSourcePolicy, mergeSourcePolicySources, sourcePolicyAllowsUrl } from "./source-policy.mjs";
+import { getScheduledSourcePolicy, mergeSourcePolicySources, sourcePolicyAllowsUrl } from "./source-policy.mjs";
 import { REGIONAL_UI_JS } from "./regional-ui.mjs";
 import { MANITOBA, ingestManitoba } from "./manitoba-feed.mjs";
 import {serveCollectorPlan,handleCollectorIngest} from "./collector-bridge.mjs";
@@ -60,7 +60,7 @@ async function resolveScheduledSourcePolicy(env, sourceId, targetUrl) {
     return { required: true, source, errorCode: "source_policy_registry_unavailable" };
   }
   try {
-    const policy = await getApprovedSourcePolicy(env.SOURCE_POLICY_POOL, source);
+    const policy = await getScheduledSourcePolicy(env.SOURCE_POLICY_POOL, source);
     if (!policy) return { required: true, source, errorCode: "source_policy_review_required" };
     if (!sourcePolicyAllowsUrl(policy, targetUrl)) {
       return { required: true, source, errorCode: "source_policy_path_not_approved" };
