@@ -12,7 +12,7 @@ export const UK_ISOLATED_STAGING=Object.freeze({
  source:"uk-dfe-teaching-vacancies"
 });
 export const UK_WORKER_MODULES=Object.freeze([
- "uk-release-worker.mjs","uk-release-db.mjs","official-feed.mjs",
+ "uk-release-worker.mjs","uk-release-db.mjs","official-feed.mjs","nyc-feed.mjs","source-connectors.mjs",
  "source-rights.mjs","india-employment-news.mjs","release-preview-ui.mjs","uk-mirror-status.mjs","isro-feed.mjs","ssb-feed.mjs"
 ]);
 export function validateIsolatedStagingState({bindings,secrets,crons,tableNames,sourceRows,unapprovedRows,workerSubdomain}){
