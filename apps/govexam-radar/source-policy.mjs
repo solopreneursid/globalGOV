@@ -226,3 +226,29 @@ export async function recordSourcePolicyReview(pool, {
   );
   return { sourceId: source.id, updated: result.rowCount === 1, automatedAccessStatus, reuseStatus };
 }
+
+// Only these exact existing first-party adapters have a documented public
+// access path and source-specific reuse policy in the repository.
+// A recorded deny, expiry or explicit review always takes precedence.
+const PUBLIC_ADAPTERS = Object.freeze({
+  "uk-dfe-teaching-vacancies": "https://teaching-vacancies.service.gov.uk/api/v1/jobs.json",
+  "india-isro-opportunities": "https://www.isro.gov.in/ViewAllOpportunities.html"
+});
+export async function getScheduledSourcePolicy(pool, source, now = Date.now()) {
+  const reviewed = await getApprovedSourcePolicy(pool, source, now);
+  if (reviewed) return reviewed;
+  if (!Object.hasOwn(PUBLIC_ADAPTERS, source.id) || source.url !== PUBLIC_ADAPTERS[source.id]) return null;
+  const result = await pool.query(
+    "SELECT automated_access_status,reuse_status,reviewer_label,reviewed_at,expires_at FROM source_policy_reviews WHERE source_id=$1",
+    [source.id]
+  );
+  const row = result.rows[0];
+  if (!row || row.reviewer_label !== "repository-policy-seed" || row.reviewed_at !== null || row.expires_at !== null ||
+      !["approved","not_assessed"].includes(row.automated_access_status) || row.reuse_status !== "conditional") return null;
+  const policy = sourceAutomationPolicy(source);
+  if (!policy.automatedCollectionEnabled || !policy.commercialReuseApproved ||
+      !policy.policyUrl || !["approved_public_feed","policy_and_robots_gated"].includes(policy.automationStatus) ||
+      !sourcePolicyAllowsUrl(policy, source.url)) return null;
+  return Object.freeze({ ...policy, minIntervalMs:5000,maxBytes:2*1024*1024,
+    reviewerLabel:"documented_public_adapter",policyBasis:"versioned_source_specific_terms_and_runtime_robots" });
+}
