@@ -1,0 +1,87 @@
+name: globalGOV static zero-cost profile
+on:
+  push:
+    branches: [infra/zero-cost-static-publisher]
+    paths: ['apps/govexam-radar/static-*','apps/govexam-radar/zero-cost-*','.github/workflows/globalgov-static.yml']
+  pull_request:
+    paths: ['apps/govexam-radar/static-*','apps/govexam-radar/zero-cost-*','.github/workflows/globalgov-static.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '45 */3 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: globalgov-static-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Test compiler, quota ledger, snapshot and failure boundaries
+        run: node --test apps/govexam-radar/static-publisher.test.mjs
+      - name: Generate synthetic production-scale snapshot (no real private data)
+        run: |
+          node --input-type=module <<'NODE'
+          import {writeFileSync} from "node:fs";
+          const now=Date.now();
+          const rows=Array.from({length:3000},(_,i)=>({source_id:"uk-dfe-teaching-vacancies",title:"Synthetic vacancy "+i,employer:"Synthetic school "+i,region:"Test region "+i%12,source_page:"https://teaching-vacancies.service.gov.uk/jobs/synthetic-"+i,closing_at:new Date(now+86400000).toISOString(),last_seen_at:now-60000,review_state:"official_feed_unreviewed",life_status:"open"}));
+          writeFileSync(process.env.RUNNER_TEMP+"/fixture.json",JSON.stringify({rows,generatedAt:now,sourceHealthy:true}),{mode:0o600});
+          NODE
+          /usr/bin/time -v node apps/govexam-radar/static-build.mjs fixture "$RUNNER_TEMP/globalgov-static" "$RUNNER_TEMP/fixture.json"
+          test "$(find "$RUNNER_TEMP/globalgov-static/public/job" -name index.html | wc -l)" -eq 3000
+      - name: Save synthetic static preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: globalgov-static-synthetic-preview
+          path: ${{ runner.temp }}/globalgov-static/public
+          retention-days: 2
+  refresh-preview:
+    # Deliberately inactive until owner verifies shared-account billing/quotas
+    # and configures dedicated protected credentials and the existing Pages project.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.GLOBALGOV_ZERO_COST_APPROVED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: globalgov-static-preview
+    concurrency:
+      group: globalgov-static-preview-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify source and build complete noindex static snapshot
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.GLOBALGOV_CF_ACCOUNT_ID }}
+          GLOBALGOV_D1_READ_TOKEN: ${{ secrets.GLOBALGOV_D1_READ_TOKEN }}
+        run: node apps/govexam-radar/static-build.mjs d1 "$RUNNER_TEMP/globalgov-static"
+      - name: Verify dedicated existing preview target and deployment budget
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.GLOBALGOV_CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.GLOBALGOV_PAGES_TOKEN }}
+          GLOBALGOV_ZERO_COST_APPROVED: ${{ vars.GLOBALGOV_ZERO_COST_APPROVED }}
+        run: node apps/govexam-radar/static-deploy-preflight.mjs
+      - name: Atomically upload static-only preview (never production)
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.GLOBALGOV_CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.GLOBALGOV_PAGES_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          cd "$RUNNER_TEMP"
+          npx --yes wrangler@4.79.0 pages deploy "$RUNNER_TEMP/globalgov-static/public" --project-name globalgov-static --branch zero-cost-preview --commit-dirty=true
+      - name: Verify published static manifest
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from "node:fs";
+          const expected=JSON.parse(readFileSync(process.env.RUNNER_TEMP+"/globalgov-static/manifest.json","utf8"));
+          const r=await fetch("https://zero-cost-preview.globalgov-static.pages.dev/index/manifest.json",{cache:"no-store",redirect:"error",signal:AbortSignal.timeout(20000)});
+          const m=await r.json();
+          if(!r.ok||m.generatedAt!==expected.generatedAt||m.count!==expected.jobs||Date.now()>=m.validUntil)throw Error("preview_release_verification_failed");
+          console.log(JSON.stringify({verifiedStaticPreview:true,publicLaunchAuthorized:false,notices:m.count}));
+          NODE
