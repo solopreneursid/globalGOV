@@ -26,6 +26,7 @@ export const REQUIRED_IMPORT_TABLES = Object.freeze([
   "moderation_actions"
 ]);
 
+export const UK_IMPORT_TABLES = Object.freeze(["official_job_notices","uk_mirror_runs","uk_mirror_state","uk_withdrawal_checks"]);
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -102,11 +103,11 @@ function quoteIdentifier(value) {
   return '"' + value + '"';
 }
 
-async function inspectTable(sourceDb, client, table) {
+async function inspectTable(sourceDb, client, table, targetSchema) {
   const sourceColumns = sourceDb.prepare("PRAGMA table_info(" + quoteIdentifier(table) + ")").all();
   if (!sourceColumns.length) throw new Error("source_table_missing:" + table);
   const targetResult = await client.query(
-    "SELECT column_name,data_type,udt_name,ordinal_position FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position",
+    "SELECT column_name,data_type,udt_name,ordinal_position FROM information_schema.columns WHERE table_schema='" + targetSchema + "' AND table_name=$1 ORDER BY ordinal_position",
     [table]
   );
   const targetColumns = targetResult.rows;
@@ -127,8 +128,10 @@ async function inspectTable(sourceDb, client, table) {
   return { sourceColumns, targetColumns, columns: sourceNames, primary };
 }
 
-async function countTarget(client, table) {
-  const result = await client.query("SELECT COUNT(*)::bigint AS count FROM " + quoteIdentifier(table));
+function targetName(table, schema) { return schema === "public" ? quoteIdentifier(table) : quoteIdentifier(schema) + "." + quoteIdentifier(table); }
+
+async function countTarget(client, table, schema) {
+  const result = await client.query("SELECT COUNT(*)::bigint AS count FROM " + targetName(table, schema));
   return Number(result.rows[0].count);
 }
 
@@ -143,7 +146,7 @@ function toPgValue(value) {
   return value;
 }
 
-async function insertRows(client, table, columns, rows) {
+async function insertRows(client, table, columns, rows, schema) {
   const names = columns.map(quoteIdentifier).join(",");
   const batchSize = Math.max(1, Math.min(500, Math.floor(60000 / columns.length)));
   for (let offset = 0; offset < rows.length; offset += batchSize) {
@@ -157,17 +160,17 @@ async function insertRows(client, table, columns, rows) {
       return "(" + placeholders.join(",") + ")";
     });
     await client.query(
-      "INSERT INTO " + quoteIdentifier(table) + " (" + names + ") VALUES " + tuples.join(","),
+      "INSERT INTO " + targetName(table, schema) + " (" + names + ") VALUES " + tuples.join(","),
       values
     );
   }
 }
 
-async function targetRows(client, table, columns, primary) {
+async function targetRows(client, table, columns, primary, schema) {
   const select = columns.map(quoteIdentifier).join(",");
   const order = primary.map(quoteIdentifier).join(",");
   const result = await client.query(
-    "SELECT " + select + " FROM " + quoteIdentifier(table) + " ORDER BY " + order
+    "SELECT " + select + " FROM " + targetName(table, schema) + " ORDER BY " + order
   );
   return result.rows;
 }
@@ -175,7 +178,7 @@ async function targetRows(client, table, columns, primary) {
 export async function importD1Snapshot({
   sourceDb, pool, mode = "plan", confirmDatabase = "", expectedDatabase = "",
   allowWrite = false, sourceId = "canonical-cloudflare-d1", sourceSha256 = null,
-  tables = REQUIRED_IMPORT_TABLES, now = Date.now()
+  tables = REQUIRED_IMPORT_TABLES, profile = "primary", now = Date.now()
 } = {}) {
   if (!sourceDb || !pool || typeof pool.connect !== "function" ||
       !["plan", "apply"].includes(mode) || !Array.isArray(tables) || !tables.length) {
@@ -188,7 +191,10 @@ export async function importD1Snapshot({
   if (mode === "apply" && pool.options?.database && pool.options.database !== expectedDatabase) {
     throw new Error("d1_import_target_database_mismatch");
   }
-  if (tables.some(table => !REQUIRED_IMPORT_TABLES.includes(table)) ||
+  if (!["primary","uk"].includes(profile)) throw new Error("invalid_d1_import_profile");
+  const targetSchema = profile === "uk" ? "uk_archive" : "public";
+  const allowedTables = profile === "uk" ? UK_IMPORT_TABLES : REQUIRED_IMPORT_TABLES;
+  if ((profile === "uk" && (tables.length !== UK_IMPORT_TABLES.length || tables.some((t,i)=>t!==UK_IMPORT_TABLES[i]))) || tables.some(table => !allowedTables.includes(table)) ||
       new Set(tables).size !== tables.length) {
     throw new Error("d1_import_table_allowlist_violation");
   }
@@ -201,11 +207,11 @@ export async function importD1Snapshot({
   let transaction = false;
   try {
     for (const table of tables) {
-      schema[table] = await inspectTable(sourceDb, client, table);
+      schema[table] = await inspectTable(sourceDb, client, table, targetSchema);
       const rows = await loadSourceRows(sourceDb, table, schema[table].primary);
       counts[table] = rows.length;
       checksums[table] = rowDigest(rows, schema[table].columns);
-      const targetCount = await countTarget(client, table);
+      const targetCount = await countTarget(client, table, targetSchema);
       if (targetCount !== 0) throw new Error("target_table_not_empty:" + table);
     }
 
@@ -228,20 +234,20 @@ export async function importD1Snapshot({
     await client.query("BEGIN");
     transaction = true;
     for (const table of tables) {
-      await client.query("LOCK TABLE " + quoteIdentifier(table) + " IN ACCESS EXCLUSIVE MODE");
-      if (await countTarget(client, table) !== 0) throw new Error("target_table_not_empty:" + table);
+      await client.query("LOCK TABLE " + targetName(table, targetSchema) + " IN ACCESS EXCLUSIVE MODE");
+      if (await countTarget(client, table, targetSchema) !== 0) throw new Error("target_table_not_empty:" + table);
     }
 
     for (const table of tables) {
       const rows = await loadSourceRows(sourceDb, table, schema[table].primary);
-      await insertRows(client, table, schema[table].columns, rows);
-      const imported = await targetRows(client, table, schema[table].columns, schema[table].primary);
+      await insertRows(client, table, schema[table].columns, rows, targetSchema);
+      const imported = await targetRows(client, table, schema[table].columns, schema[table].primary, targetSchema);
       if (imported.length !== rows.length || rowDigest(imported, schema[table].columns) !== checksums[table]) {
         throw new Error("row_checksum_mismatch:" + table);
       }
     }
 
-    for (const table of ["portal_history", "notice_revisions"]) {
+    for (const table of profile === "primary" ? ["portal_history", "notice_revisions"] : []) {
       const result = await client.query(
         "SELECT setval(pg_get_serial_sequence($1,'id'),COALESCE((SELECT MAX(id) FROM " +
         quoteIdentifier(table) + "),1),EXISTS(SELECT 1 FROM " + quoteIdentifier(table) + "))",
@@ -284,20 +290,20 @@ export async function importD1Snapshot({
 
 export async function importEncryptedD1Backup({
   backupPath, key, pool, mode = "plan", confirmDatabase = "", expectedDatabase = "",
-  allowWrite = false, sourceId = "canonical-cloudflare-d1", now = Date.now()
+  allowWrite = false, profile = "primary", sourceId = profile === "uk" ? "uk-isolated-cloudflare-d1" : "canonical-cloudflare-d1", now = Date.now()
 } = {}) {
   if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error("d1_import_key_invalid");
   const envelope = await privateBackup(backupPath);
   const sourceSha256 = hash(envelope);
   const sql = openD1Export(envelope, key);
   try {
-    const verification = await verifySqlExport(sql);
+    const verification = await verifySqlExport(sql, profile);
     const restored = await restoreVerifiedSqlite(sql);
     try {
       return {
         ...await importD1Snapshot({
           sourceDb: restored.db, pool, mode, confirmDatabase, expectedDatabase,
-          allowWrite, sourceId, sourceSha256, now
+          allowWrite, sourceId, sourceSha256, profile, tables: profile === "uk" ? UK_IMPORT_TABLES : REQUIRED_IMPORT_TABLES, now
         }),
         sourceIntegrity: verification.integrity,
         sourceCounts: verification.counts
@@ -313,9 +319,11 @@ export async function importEncryptedD1Backup({
 }
 
 async function main() {
-  const [mode, backupPath, ...extra] = process.argv.slice(2);
+  const [action, backupPath, ...extra] = process.argv.slice(2);
+  const profile = action?.endsWith("-uk") ? "uk" : "primary";
+  const mode = profile === "uk" ? action.slice(0,-3) : action;
   if (extra.length || !["plan", "apply"].includes(mode) || !backupPath) {
-    throw new Error("usage: postgres-import.mjs plan PRIVATE_D1_BACKUP.enc | apply PRIVATE_D1_BACKUP.enc");
+    throw new Error("usage: postgres-import.mjs plan|plan-uk PRIVATE_D1_BACKUP.enc | apply|apply-uk PRIVATE_D1_BACKUP.enc");
   }
   const expectedDatabase = process.env.PGDATABASE || "";
   const confirmDatabase = process.env.GLOBALGOV_IMPORT_CONFIRM_DATABASE || "";
@@ -324,7 +332,7 @@ async function main() {
   const pool = await createPostgresPoolFromEnv();
   try {
     const result = await importEncryptedD1Backup({
-      backupPath, key, pool, mode, confirmDatabase, expectedDatabase, allowWrite
+      backupPath, key, pool, mode, confirmDatabase, expectedDatabase, allowWrite, profile
     });
     console.log(JSON.stringify(result));
   } finally {
