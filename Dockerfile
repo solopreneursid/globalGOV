@@ -1,7 +1,9 @@
 FROM node:26-bookworm-slim
 
+ARG ENABLE_OCR=false
 RUN apt-get update \
     && apt-get install -y --no-install-recommends sqlite3 poppler-utils ca-certificates \
+    && if [ "$ENABLE_OCR" = "true" ]; then apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng; elif [ "$ENABLE_OCR" != "false" ]; then exit 1; fi \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
